@@ -4,7 +4,7 @@ SHELL := /bin/bash
 GLEAM ?= gleam
 NPM   ?= npm
 NODE  ?= node
-PORT  ?= 3001
+PORT  ?= 3000
 HOST  ?= 0.0.0.0
 
 .PHONY: help build dev test check format deps run preview clean

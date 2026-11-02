@@ -3,20 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>sid-to-skode · C64 SID to Skode Converter & Web Studio</title>
+  <title>sid-to-skode · C64 SID to Skode Converter &amp; Web Studio</title>
   <link rel="stylesheet" href="/src/styles.css">
-  <script>
-    window.coi = {
-      shouldRegister: () => !window.crossOriginIsolated,
-      doReload: () => {
-        if (!sessionStorage.getItem("coi_reloaded")) {
-          sessionStorage.setItem("coi_reloaded", "1");
-          window.location.reload();
-        }
-      }
-    };
-  </script>
   <script src="./coi-serviceworker.js"></script>
+</head>
+<body>
+  <div id="app"></div>
   <script>
     window.Module = window.Module || {};
     window.__skredStdout = [];
@@ -35,9 +27,6 @@
     };
   </script>
   <script src="./vendor/skred/skred_api.js"></script>
-</head>
-<body>
-  <div id="app"></div>
   <script type="module" src="/src/entry.mjs"></script>
 </body>
 </html>

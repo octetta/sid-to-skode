@@ -286,14 +286,18 @@ export function initEngine(callback) {
     if (callback) callback(true);
   };
 
-  if (win.Module.calledRun) {
+  const prevInit = win.Module.onRuntimeInitialized;
+  win.Module.onRuntimeInitialized = function () {
+    if (prevInit) prevInit();
     finishInit();
-  } else {
-    const prevInit = win.Module.onRuntimeInitialized;
-    win.Module.onRuntimeInitialized = function () {
-      if (prevInit) prevInit();
-      finishInit();
-    };
+  };
+
+  if (
+    win.Module.calledRun ||
+    (win.Module.HEAPU32 && typeof win.Module.ccall === "function") ||
+    typeof win.Module._skred_start === "function"
+  ) {
+    finishInit();
   }
 }
 
@@ -325,11 +329,9 @@ export function playSkode(script, steps) {
   // 2. Write script to VFS and load it cleanly via /ls
   try {
     if (M.FS) {
-      try { M.FS.writeFile("/song.sk", script); } catch (e) {
-        try { M.FS.unlink("/song.sk"); } catch (e2) {}
-        M.FS.writeFile("/song.sk", script);
-      }
-      executeSkredCommand("[/song.sk] /ls");
+      try { M.FS.writeFile("/song.sk", script); } catch (e) {}
+      try { M.FS.writeFile("song.sk", script); } catch (e) {}
+      executeSkredCommand("[song.sk] /ls");
       executeSkredCommand("y0 yc1");
       executeSkredCommand("V" + currentMasterVolume);
       executeSkredCommand("play");

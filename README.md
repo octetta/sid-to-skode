@@ -148,8 +148,8 @@ make deps       # Download Gleam and npm dependencies
 make check      # Verify Gleam types and compilation
 make test       # Run Gleam unit test suite
 make build      # Compile Gleam and bundle production web app into dist/
-make dev        # Start Vite development server on port 3001
-make preview    # Preview production build on port 3001
+make dev        # Start Vite development server on port 3000
+make preview    # Preview production build on port 3000
 ```
 
 ---
