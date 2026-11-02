@@ -14,8 +14,8 @@
   "scripts": {
     "build:gleam": "gleam build --target javascript",
     "build": "gleam build --target javascript && vite build",
-    "dev": "gleam build --target javascript && vite",
-    "preview": "vite preview",
+    "dev": "gleam build --target javascript && vite --open",
+    "preview": "vite preview --open",
     "test": "gleam test --target javascript"
   },
   "devDependencies": {
