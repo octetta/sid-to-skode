@@ -326,14 +326,12 @@ export function playSkode(script, steps) {
       try { M.FS.writeFile("/song.sk", script); } catch (e) {}
       try { M.FS.writeFile("song.sk", script); } catch (e) {}
       executeSkredCommand("[song.sk] /ls");
-      executeSkredCommand("y0 yc1");
+      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("play");
     } else {
       executeSkredCommand(script);
-      executeSkredCommand("y0 yc1");
+      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("play");
     }
     startWasmEventPump(M);
   } catch (err) {
@@ -368,6 +366,7 @@ export function stopPlayback() {
   stopWasmEventPump();
   ensureAudioContext();
   executeSkredCommand("stop");
+  executeSkredCommand("Y-1");
   executeSkredCommand("S-1");
   if (playbackEndedCallback) playbackEndedCallback();
 }
@@ -471,8 +470,12 @@ export async function runSidDumpWasm(bytes, filename) {
     const virtualFile = "tune.sid";
     instance.FS.writeFile(virtualFile, bytes);
 
-    // Dump up to 90 seconds (4500 frames) of subtune 0 (default song)
-    instance.callMain([virtualFile, "-t90"]);
+    // Dump up to 45 seconds (2250 frames) of subtune 0 (default song)
+    try {
+      instance.callMain([virtualFile, "-t45"]);
+    } catch (_) {
+      // Emscripten exits with ExitStatus upon normal completion
+    }
     return output;
   } catch (err) {
     console.error("[sid-to-skode] Error executing siddump WASM on " + filename + ":", err);
@@ -519,18 +522,7 @@ export async function fetchRandomSid(onSuccess, onError) {
   try {
     const idx = Math.floor(Math.random() * SID_CATALOG.length);
     const item = SID_CATALOG[idx];
-    const targetUrl =
-      typeof window !== "undefined"
-        ? new URL(item.url, window.location.href).href
-        : item.url;
-    const res = await fetch(targetUrl);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const buf = await res.arrayBuffer();
-    const dumpText = await runSidDumpWasm(new Uint8Array(buf), item.filename);
-    if (!dumpText) throw new Error("Could not dump SID tune.");
-    if (onSuccess) {
-      onSuccess(item.filename, dumpText, item.title, item.author);
-    }
+    return loadDemoSid(item.url, item.filename, item.title, item.author, onSuccess, onError);
   } catch (err) {
     console.error("[sid-to-skode] Error loading random SID:", err);
     if (onError) onError(err.message || "Failed to load demo");
@@ -539,6 +531,27 @@ export async function fetchRandomSid(onSuccess, onError) {
 
 export async function loadDemoSid(url, filename, title, author, onSuccess, onError) {
   try {
+    // 1. Instant loading: Try fetching pre-dumped file directly (.dump) to avoid WASM CPU overhead
+    const dumpUrl = url.replace(/\.sid$/i, ".dump");
+    const targetDumpUrl =
+      typeof window !== "undefined"
+        ? new URL(dumpUrl, window.location.href).href
+        : dumpUrl;
+
+    try {
+      const dumpRes = await fetch(targetDumpUrl);
+      if (dumpRes.ok) {
+        const dumpText = await dumpRes.text();
+        if (dumpText && dumpText.length > 100) {
+          if (onSuccess) onSuccess(filename, dumpText, title, author);
+          return;
+        }
+      }
+    } catch (_) {
+      // Fallback to WASM emulation below if .dump fetch fails
+    }
+
+    // 2. Emulation fallback: Fetch raw .sid binary and emulate via siddump WASM
     const targetUrl =
       typeof window !== "undefined"
         ? new URL(url, window.location.href).href

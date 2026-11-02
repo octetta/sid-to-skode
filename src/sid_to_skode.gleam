@@ -445,7 +445,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           is_paused: False,
           current_step: 0,
           is_converting: True,
-          status_text: "Running 6502 in-browser emulation on "
+          status_text: "Loading demo "
             <> title
             <> " ("
             <> author

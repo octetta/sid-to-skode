@@ -145,30 +145,22 @@ fn wave_opcode(wave_byte: Int) -> String {
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    True, _, _, _ -> "w6"
-    _, True, _, _ -> "w15"
-    _, _, True, _ -> "w16"
-    _, _, _, True -> "w18"
-    _, _, _, _ -> "w15"
+    True, _, _, _ -> "w5"
+    _, True, _, _ -> "w3"
+    _, _, True, _ -> "w1"
+    _, _, _, True -> "w4"
+    _, _, _, _ -> "w1"
   }
 }
 
-fn filter_mode_num(mode_str: String) -> Int {
-  case mode_str {
-    "Low" -> 1
-    "Hi " -> 2
-    "Bnd" -> 3
-    "L+H" -> 4
-    _ -> 0
-  }
-}
+
 
 /// Generates space-separated Skode command tokens for a voice frame.
 /// Pattern remembers the selected voice, so voice selection is not repeated.
 fn generate_voice_step_tokens(
   vf: VoiceFrame,
   tracker: VoiceTracker,
-  mod_voice: Int,
+  _mod_voice: Int,
 ) -> #(List(String), VoiceTracker) {
   let tokens = []
 
@@ -211,18 +203,6 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_adsr)
   }
 
-  // Ring modulation changed
-  let #(tokens, next_ring) = case vf.ring_mod != tracker.last_ring {
-    True -> {
-      let ring_str = case vf.ring_mod {
-        True -> "XM " <> int.to_string(mod_voice)
-        False -> "XM -1"
-      }
-      #([ring_str, ..tokens], vf.ring_mod)
-    }
-    False -> #(tokens, tracker.last_ring)
-  }
-
   // Frequency and Gate transitions
   let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
   let gate_turned_on = vf.gate && !tracker.last_gate
@@ -257,67 +237,19 @@ fn generate_voice_step_tokens(
       last_adsr: next_adsr,
       last_pulse: next_pulse,
       last_gate: vf.gate,
-      last_ring: next_ring,
+      last_ring: tracker.last_ring,
     )
 
   #(list.reverse(tokens), next_tracker)
 }
 
-/// Generates space-separated tokens for filter / volume changes on conductor track.
+/// Generates space-separated tokens for volume changes on conductor track.
 fn generate_filter_step_tokens(
   ff: FilterFrame,
   tracker: FilterTracker,
 ) -> #(List(String), FilterTracker) {
   let tokens = []
-  let mode_int = filter_mode_num(ff.mode_str)
-
-  let cutoff_changed = ff.cutoff != tracker.last_cutoff
-  let res_changed = ff.resonance != tracker.last_res
-  let mode_changed = ff.mode_str != tracker.last_mode
   let vol_changed = ff.volume != tracker.last_vol
-  let route_changed =
-    ff.route_v1 != tracker.last_route_v1
-    || ff.route_v2 != tracker.last_route_v2
-    || ff.route_v3 != tracker.last_route_v3
-
-  let #(tokens, next_cutoff, next_res, next_mode) = case
-    cutoff_changed || res_changed || mode_changed || route_changed
-  {
-    True -> {
-      let hz = format_float(cutoff_to_hz(ff.cutoff), 1)
-      let q = format_float(res_to_q(ff.resonance), 2)
-      let mode_str = int.to_string(mode_int)
-
-      let voice_cmds = []
-      let voice_cmds = case ff.route_v1 {
-        True -> ["v0 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
-        False ->
-          case tracker.last_route_v1 {
-            True -> ["v0 J0", ..voice_cmds]
-            False -> voice_cmds
-          }
-      }
-      let voice_cmds = case ff.route_v2 {
-        True -> ["v1 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
-        False ->
-          case tracker.last_route_v2 {
-            True -> ["v1 J0", ..voice_cmds]
-            False -> voice_cmds
-          }
-      }
-      let voice_cmds = case ff.route_v3 {
-        True -> ["v2 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
-        False ->
-          case tracker.last_route_v3 {
-            True -> ["v2 J0", ..voice_cmds]
-            False -> voice_cmds
-          }
-      }
-
-      #(list.append(voice_cmds, tokens), ff.cutoff, ff.resonance, ff.mode_str)
-    }
-    False -> #(tokens, tracker.last_cutoff, tracker.last_res, tracker.last_mode)
-  }
 
   // Volume changes: per-voice amplitude 'a' is schedulable, while master 'V' is immediate-only.
   let #(tokens, next_vol) = case vol_changed {
@@ -338,9 +270,9 @@ fn generate_filter_step_tokens(
 
   let next_tracker =
     FilterTracker(
-      last_cutoff: next_cutoff,
-      last_res: next_res,
-      last_mode: next_mode,
+      last_cutoff: ff.cutoff,
+      last_res: ff.resonance,
+      last_mode: ff.mode_str,
       last_vol: next_vol,
       last_route_v1: ff.route_v1,
       last_route_v2: ff.route_v2,
@@ -384,9 +316,9 @@ pub fn convert_song(
         "",
         "# === INITIALIZATION ===",
         "S0 S1 S2 S3",
-        "v0 [Voice 1] vt w16 a0 t0.002,0.008,0.5,0.01 p" <> p0,
-        "v1 [Voice 2] vt w15 a0 t0.002,0.008,0.5,0.01 p" <> p1,
-        "v2 [Voice 3] vt w18 a0 t0.002,0.008,0.5,0.01 p" <> p2,
+        "v0 [Voice 1] vt w1 a0 t0.002,0.008,0.5,0.01 p" <> p0,
+        "v1 [Voice 2] vt w3 a0 t0.002,0.008,0.5,0.01 p" <> p1,
+        "v2 [Voice 3] vt w4 a0 t0.002,0.008,0.5,0.01 p" <> p2,
         "v3 [Filter] vt w0 a0",
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
