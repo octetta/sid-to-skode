@@ -1,0 +1,27 @@
+{
+  "name": "sid-to-skode",
+  "version": "0.1.0",
+  "description": "Commodore 64 SID to Skode converter and real-time playback engine in Gleam and Lustre",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/octetta/sid-to-skode.git"
+  },
+  "imports": {
+    "#vendor/*": "./vendor/*"
+  },
+  "scripts": {
+    "build:gleam": "gleam build --target javascript",
+    "build": "gleam build --target javascript && vite build",
+    "dev": "gleam build --target javascript && vite",
+    "preview": "vite preview",
+    "test": "gleam test --target javascript"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  },
+  "dependencies": {
+    "coi-serviceworker": "^0.1.7"
+  }
+}

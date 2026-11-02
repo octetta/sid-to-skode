@@ -1,0 +1,14 @@
+name = "sid_to_skode"
+version = "0.1.0"
+description = "Commodore 64 SID to Skode converter and real-time playback engine in Gleam and Lustre"
+licences = ["MIT"]
+repository = { type = "github", user = "octetta", repo = "sid-to-skode" }
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+lustre = ">= 5.0.0 and < 6.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
