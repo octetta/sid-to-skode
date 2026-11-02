@@ -5,16 +5,24 @@ const win = typeof window !== "undefined" ? window : globalThis;
 
 let moduleReady = false;
 let engineStarted = false;
-let audioContext = null;
+let audioUnlocked = false;
 let currentMasterVolume = -6;
 let isPlaybackActive = false;
 let isPlaybackPaused = false;
 let playbackStepCallback = null;
 let playbackEndedCallback = null;
-let totalSongSteps = 0;
-let currentStepNumber = 0;
+let activeSongTotalSteps = 0;
+let lastReportedStep = -1;
 
 let siddumpModule = null;
+
+// WASM Control Event polling setup
+const MAX_EVENTS_BATCH = 64;
+const EVENT_SIZE = 72;
+let wasmEventsBuffer = null;
+let eventPumpStarted = false;
+let currentEventSubscription = null;
+const commandQueue = [];
 
 // ---------------------------------------------------------------------------
 // 1. Skred WASM Audio Engine Initialization
@@ -27,9 +35,52 @@ function getWasmModule() {
   return null;
 }
 
+function ensureAudioContext() {
+  const M = win.Module;
+  if (M && M.audioContext && M.audioContext.state === "suspended") {
+    M.audioContext.resume().catch(() => {});
+  }
+  if (win.AL && win.AL.currentCtx && win.AL.currentCtx.audioCtx && win.AL.currentCtx.audioCtx.state === "suspended") {
+    win.AL.currentCtx.audioCtx.resume().catch(() => {});
+  }
+  if (win.miniaudio && Array.isArray(win.miniaudio.devices)) {
+    for (const dev of win.miniaudio.devices) {
+      if (dev && dev.webaudio && dev.webaudio.state === "suspended") {
+        dev.webaudio.resume().catch(() => {});
+      }
+    }
+  }
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  ensureAudioContext();
+  removeAudioUnlockListeners();
+}
+
+function setupAudioUnlockListeners() {
+  if (typeof window === "undefined") return;
+  const events = ["click", "touchstart", "touchend", "pointerdown", "keydown"];
+  events.forEach((evt) => {
+    window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+  });
+}
+
+function removeAudioUnlockListeners() {
+  if (typeof window === "undefined") return;
+  const events = ["click", "touchstart", "touchend", "pointerdown", "keydown"];
+  events.forEach((evt) => {
+    window.removeEventListener(evt, unlockAudio);
+  });
+}
+
 export function executeSkredCommand(cmd) {
   const M = getWasmModule();
-  if (!M) return;
+  if (!M) {
+    commandQueue.push(cmd);
+    return;
+  }
 
   if (typeof M.ccall === "function") {
     try {
@@ -48,6 +99,107 @@ export function executeSkredCommand(cmd) {
   }
 }
 
+export function sendCommand(cmd) {
+  executeSkredCommand(cmd);
+}
+
+export function setMasterVolume(volDb) {
+  currentMasterVolume = volDb;
+  executeSkredCommand("V" + volDb);
+}
+
+export function panicEngine() {
+  stopPlayback();
+  executeSkredCommand("S-1");
+  executeSkredCommand("Y-1");
+}
+
+function flushCommandQueue() {
+  const M = getWasmModule();
+  if (!M || !engineStarted) return;
+  while (commandQueue.length > 0) {
+    const cmd = commandQueue.shift();
+    try {
+      M.ccall("skred_command", "number", ["string"], [cmd]);
+    } catch (e) {
+      console.error("[sid-to-skode] Error executing queued command:", cmd, e);
+    }
+  }
+}
+
+function startWasmEventPump(M) {
+  if (!M || typeof M._skred_control_event_poll !== "function") return;
+  if (!wasmEventsBuffer && typeof M._malloc === "function") {
+    wasmEventsBuffer = M._malloc(MAX_EVENTS_BATCH * EVENT_SIZE);
+  }
+  if (eventPumpStarted) return;
+  eventPumpStarted = true;
+
+  function pump() {
+    if (
+      M &&
+      typeof M._skred_control_event_poll === "function" &&
+      wasmEventsBuffer &&
+      M.HEAPU8
+    ) {
+      try {
+        const count = M._skred_control_event_poll(wasmEventsBuffer, MAX_EVENTS_BATCH);
+        if (count > 0) {
+          const events = [];
+          const view = new DataView(M.HEAPU8.buffer, wasmEventsBuffer, count * EVENT_SIZE);
+          for (let i = 0; i < count; i++) {
+            const base = i * EVENT_SIZE;
+            const t = view.getUint32(base + 0, true);
+            const opcode = view.getUint32(base + 4, true);
+            const sample = Number(view.getBigUint64(base + 8, true));
+            const seq = Number(view.getBigUint64(base + 16, true));
+            const v = view.getInt32(base + 24, true);
+            const p = view.getInt32(base + 28, true);
+            const s = view.getInt32(base + 32, true);
+            const tag = view.getInt32(base + 36, true);
+            const id = view.getInt32(base + 40, true);
+            const value_count = view.getUint32(base + 44, true);
+            const vals = [
+              view.getFloat64(base + 48, true),
+              view.getFloat64(base + 56, true),
+              view.getFloat64(base + 64, true),
+            ];
+            events.push({ t, opcode, sample, seq, v, p, s, tag, id, value_count, vals });
+
+            // Step tracking: event 9 (SKRED_CONTROL_EVENT_PATTERN_STEP) on pattern 0
+            if (isPlaybackActive && t === 9 && p === 0) {
+              if (s !== lastReportedStep && s >= 0) {
+                if (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) {
+                  stopPlayback();
+                  if (playbackEndedCallback) playbackEndedCallback();
+                  return;
+                }
+                lastReportedStep = s;
+                if (playbackStepCallback) {
+                  playbackStepCallback(s, activeSongTotalSteps);
+                }
+              }
+            }
+
+            // Song end: event 4 (USER id 127) or event 6 (PATTERN_END on pattern 0)
+            if (isPlaybackActive && ((t === 4 && id === 127) || (t === 6 && p === 0))) {
+              stopPlayback();
+              if (playbackEndedCallback) playbackEndedCallback();
+            }
+          }
+          if (currentEventSubscription) {
+            currentEventSubscription(events);
+          }
+        }
+      } catch (err) {
+        console.error("[sid-to-skode] Event pump error:", err);
+      }
+    }
+    requestAnimationFrame(pump);
+  }
+  requestAnimationFrame(pump);
+}
+
 export function initEngine(callback) {
   if (moduleReady) {
     if (callback) callback(true);
@@ -62,11 +214,13 @@ export function initEngine(callback) {
     return "/vendor/skred/" + path;
   };
 
+  setupAudioUnlockListeners();
+
   let initializedDone = false;
   const finishInit = () => {
     if (initializedDone) return;
     initializedDone = true;
-    console.log("[sid-to-skode] Skred WASM engine initialized.");
+    console.log("[sid-to-skode] Skred WASM runtime initialized.");
     moduleReady = true;
 
     try {
@@ -79,45 +233,66 @@ export function initEngine(callback) {
       }
       if (typeof win.Module._skred_start === "function") {
         const res = win.Module._skred_start(128, 256, -1);
+        console.log("[sid-to-skode] _skred_start returned:", res);
         engineStarted = (res === 0);
       }
+      if (typeof win.Module._skred_logger === "function") {
+        win.Module._skred_logger(1);
+      }
+
       executeSkredCommand("stop");
+      executeSkredCommand("Y-1");
       executeSkredCommand("S-1");
       executeSkredCommand("V-6");
-    } catch (e) {
-      console.error("[sid-to-skode] Error starting audio device:", e);
+
+      startWasmEventPump(win.Module);
+      flushCommandQueue();
+    } catch (err) {
+      console.error("[sid-to-skode] Error initializing Skred audio:", err);
     }
 
     if (callback) callback(true);
   };
 
-  if (win.Module.calledRun) {
+  const prevInit = win.Module.onRuntimeInitialized;
+  win.Module.onRuntimeInitialized = function () {
+    if (prevInit) prevInit();
     finishInit();
-  } else {
-    const prevOnRuntimeInitialized = win.Module.onRuntimeInitialized;
-    win.Module.onRuntimeInitialized = function () {
-      if (prevOnRuntimeInitialized) prevOnRuntimeInitialized();
-      finishInit();
-    };
+  };
+
+  if (
+    win.Module.calledRun ||
+    (win.Module.HEAPU32 && typeof win.Module.ccall === "function") ||
+    typeof win.Module._skred_start === "function"
+  ) {
+    finishInit();
   }
 
-  // Also load siddump WASM module
+  // Pre-load siddump WASM module
   import("#vendor/siddump_wasm.js")
     .then((mod) => {
       const factory = mod.default || mod;
       if (typeof factory === "function") {
-        return factory();
+        return factory({
+          locateFile: (p) => {
+            if (typeof window !== "undefined") {
+              return new URL("vendor/" + p, window.location.href).href;
+            }
+            return "/vendor/" + p;
+          },
+          noInitialRun: true,
+        });
       }
       return null;
     })
-    .then((modInstance) => {
-      if (modInstance) {
-        siddumpModule = modInstance;
-        console.log("[sid-to-skode] In-browser siddump WASM ready.");
+    .then((instance) => {
+      if (instance) {
+        siddumpModule = instance;
+        console.log("[sid-to-skode] In-browser siddump 6502 WASM ready.");
       }
     })
     .catch((err) => {
-      console.warn("[sid-to-skode] Note: siddump WASM loading deferred or error:", err);
+      console.warn("[sid-to-skode] Deferred loading siddump WASM:", err);
     });
 }
 
@@ -126,51 +301,74 @@ export function initEngine(callback) {
 // ---------------------------------------------------------------------------
 
 export function playSkode(script, steps) {
-  totalSongSteps = steps;
-  currentStepNumber = 0;
+  activeSongTotalSteps = typeof steps === "number" ? steps : 0;
   isPlaybackActive = true;
   isPlaybackPaused = false;
+  lastReportedStep = -1;
 
-  // Unlock audio context if needed
-  if (win.Module && win.Module.audioContext && win.Module.audioContext.state === "suspended") {
-    win.Module.audioContext.resume();
+  ensureAudioContext();
+  unlockAudio();
+
+  const M = getWasmModule();
+  if (!M) {
+    console.warn("[sid-to-skode] WASM module not ready for playback.");
+    return;
   }
 
+  // 1. Halt previous playback, reset patterns and voices
   executeSkredCommand("stop");
+  executeSkredCommand("Y-1");
   executeSkredCommand("S-1");
-  executeSkredCommand(script);
-  executeSkredCommand("start");
+
+  // 2. Write script to VFS and load it cleanly via /ls
+  try {
+    if (M.FS) {
+      M.FS.writeFile("/song.sk", script);
+      executeSkredCommand("[/song.sk] /ls");
+      executeSkredCommand("y0 yc1");
+      executeSkredCommand("V" + currentMasterVolume);
+      executeSkredCommand("play");
+    } else {
+      // Fallback: direct command dispatch
+      executeSkredCommand(script);
+      executeSkredCommand("y0 yc1");
+      executeSkredCommand("V" + currentMasterVolume);
+      executeSkredCommand("play");
+    }
+  } catch (err) {
+    console.error("[sid-to-skode] Error starting playback:", err);
+  }
 }
 
 export function pausePlayback() {
-  if (isPlaybackActive) {
-    isPlaybackPaused = true;
-    executeSkredCommand("pause");
+  if (!isPlaybackActive) return;
+  isPlaybackPaused = true;
+  const M = win.Module;
+  if (M && M.audioContext && M.audioContext.state === "running") {
+    M.audioContext.suspend().catch(() => {});
   }
+  executeSkredCommand("Z2");
 }
 
 export function resumePlayback() {
-  if (isPlaybackActive && isPlaybackPaused) {
-    isPlaybackPaused = false;
-    executeSkredCommand("start");
-  }
+  if (!isPlaybackActive) return;
+  isPlaybackPaused = false;
+  ensureAudioContext();
+  executeSkredCommand("Z3");
 }
 
 export function stopPlayback() {
   isPlaybackActive = false;
   isPlaybackPaused = false;
+  lastReportedStep = -1;
+  ensureAudioContext();
   executeSkredCommand("stop");
   executeSkredCommand("S-1");
   if (playbackEndedCallback) playbackEndedCallback();
 }
 
-export function setVolume(volDb) {
-  currentMasterVolume = volDb;
-  executeSkredCommand("V" + volDb);
-}
-
 export function setStereoProfile(mode) {
-  // mode: 0 = Headphone, 1 = Amiga Hardware, 2 = Mono
+  // mode: 0 = Headphone, 1 = Wide, 2 = Mono
   if (mode === 0) {
     executeSkredCommand("v0 p-0.6; v1 p0.6; v2 p0.0");
   } else if (mode === 1) {
@@ -186,7 +384,7 @@ export function registerPlaybackListener(onStep, onEnd) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. File Loading & DeepSID Client
+// 3. File Loading & In-Browser SID Emulation (siddump WASM)
 // ---------------------------------------------------------------------------
 
 export function registerFileDrop(callback) {
@@ -201,15 +399,15 @@ export function registerFileDrop(callback) {
 
     const file = files[0];
     const name = file.name;
+    const buffer = await file.arrayBuffer();
 
-    if (name.endsWith(".sid") || name.endsWith(".SID")) {
-      const buffer = await file.arrayBuffer();
+    if (name.toLowerCase().endsWith(".sid")) {
       const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name);
       if (dumpText && callback) {
         callback(name, dumpText);
       }
     } else {
-      const text = await file.text();
+      const text = new TextDecoder().decode(buffer);
       if (callback) callback(name, text);
     }
   };
@@ -218,83 +416,130 @@ export function registerFileDrop(callback) {
   window.addEventListener("drop", handleDrop);
 }
 
-export function runSidDumpWasm(bytes, filename) {
-  return new Promise((resolve) => {
-    if (!siddumpModule) {
-      console.warn("[sid-to-skode] siddump WASM not loaded, attempting fallback...");
-      import("#vendor/siddump_wasm.js")
-        .then(m => (m.default || m)())
-        .then(mod => {
-          siddumpModule = mod;
-          resolve(executeDumpOnModule(mod, bytes, filename));
-        })
-        .catch(err => {
-          console.error("Failed to execute siddump WASM:", err);
-          resolve("");
-        });
-      return;
-    }
-    resolve(executeDumpOnModule(siddumpModule, bytes, filename));
-  });
-}
-
-function executeDumpOnModule(mod, bytes, filename) {
+export async function runSidDumpWasm(bytes, filename) {
   try {
-    const virtualName = "tune.sid";
-    mod.FS.writeFile(virtualName, bytes);
+    const mod = await import("#vendor/siddump_wasm.js");
+    const factory = mod.default || mod;
     let output = "";
-    mod.print = (text) => { output += text + "\n"; };
-    mod.printErr = (text) => { console.warn("[siddump]", text); };
-    // Dump up to 90 seconds (4500 frames)
-    mod.callMain([virtualName, "-t90"]);
+
+    const instance = await factory({
+      locateFile: (p) => {
+        if (typeof window !== "undefined") {
+          return new URL("vendor/" + p, window.location.href).href;
+        }
+        return "/vendor/" + p;
+      },
+      noInitialRun: true,
+      print: (text) => {
+        output += text + "\n";
+      },
+      printErr: (text) => {
+        console.warn("[siddump]", text);
+      },
+    });
+
+    const virtualFile = "tune.sid";
+    instance.FS.writeFile(virtualFile, bytes);
+
+    // Dump up to 90 seconds (4500 frames) of subtune 0 (default song)
+    instance.callMain([virtualFile, "-t90"]);
     return output;
   } catch (err) {
-    console.error("[sid-to-skode] Error running siddump WASM:", err);
+    console.error("[sid-to-skode] Error executing siddump WASM on " + filename + ":", err);
     return "";
   }
 }
 
-export function fetchRandomDeepSid(onSuccess, onError) {
-  fetch("https://deepsid.chordian.net/php/radio_random_file.php")
-    .then(r => r.json())
-    .then(data => {
-      if (data.status === "ok" && data.path) {
-        const fileUrl = "https://deepsid.chordian.net/music/" + encodeURI(data.path);
-        const fileName = data.path.split("/").pop();
-        return fetch(fileUrl)
-          .then(r => r.arrayBuffer())
-          .then(async (ab) => {
-            const dumpText = await runSidDumpWasm(new Uint8Array(ab), fileName);
-            if (dumpText && onSuccess) {
-              onSuccess(fileName, dumpText);
-            } else if (onError) {
-              onError("Failed to generate SID dump for: " + fileName);
-            }
-          });
-      } else if (onError) {
-        onError("DeepSID returned empty track.");
-      }
-    })
-    .catch(err => {
-      if (onError) onError(String(err));
-    });
-}
+// ---------------------------------------------------------------------------
+// 4. Curated Demo Catalog & Random SID Loader
+// ---------------------------------------------------------------------------
 
-export function copyToClipboard(text) {
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    navigator.clipboard.writeText(text);
+export const SID_CATALOG = [
+  {
+    title: "Commando",
+    author: "Rob Hubbard",
+    filename: "commando.sid",
+    url: "demos/commando.sid",
+    source: "Elite (1985)",
+  },
+  {
+    title: "Monty on the Run",
+    author: "Rob Hubbard",
+    filename: "monty_on_the_run.sid",
+    url: "demos/monty_on_the_run.sid",
+    source: "Gremlin Graphics (1985)",
+  },
+  {
+    title: "Comic Bakery",
+    author: "Martin Galway",
+    filename: "comic_bakery.sid",
+    url: "demos/comic_bakery.sid",
+    source: "Imagine (1986)",
+  },
+  {
+    title: "Arkanoid",
+    author: "Martin Galway",
+    filename: "arkanoid.sid",
+    url: "demos/arkanoid.sid",
+    source: "Imagine (1987)",
+  },
+];
+
+export async function fetchRandomSid(onSuccess, onError) {
+  try {
+    const idx = Math.floor(Math.random() * SID_CATALOG.length);
+    const item = SID_CATALOG[idx];
+    const res = await fetch(item.url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const buf = await res.arrayBuffer();
+    const dumpText = await runSidDumpWasm(new Uint8Array(buf), item.filename);
+    if (!dumpText) throw new Error("Could not dump SID tune.");
+    if (onSuccess) {
+      onSuccess(item.filename, dumpText, item.title, item.author);
+    }
+  } catch (err) {
+    console.error("[sid-to-skode] Error loading random SID:", err);
+    if (onError) onError(err.message || "Failed to load demo");
   }
 }
 
-export function downloadFile(filename, content) {
-  if (typeof window === "undefined") return;
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+export async function loadDemoSid(url, filename, title, author, onSuccess, onError) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const buf = await res.arrayBuffer();
+    const dumpText = await runSidDumpWasm(new Uint8Array(buf), filename);
+    if (!dumpText) throw new Error("Could not dump SID tune.");
+    if (onSuccess) {
+      onSuccess(filename, dumpText, title, author);
+    }
+  } catch (err) {
+    console.error("[sid-to-skode] Error loading demo SID:", err);
+    if (onError) onError(err.message || "Failed to load demo");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Utility Helpers (Download & Clipboard)
+// ---------------------------------------------------------------------------
+
+export function copyToClipboard(text) {
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
+
+export function downloadFile(filename, text) {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }

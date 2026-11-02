@@ -5,3 +5,4 @@ node_modules/
 *.sk
 demos/*.sk
 .DS_Store
+*history.txt

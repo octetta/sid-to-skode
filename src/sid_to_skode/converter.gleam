@@ -1,12 +1,14 @@
-//// Compiles parsed SID dumps into clean, optimized Skode 0.80.0 scripts.
+//// Compiles parsed SID dumps into clean, idiomatic Skode 0.80.0 scripts.
 
+import gleam/dict
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/string
 import sid_to_skode/types.{
-  type ConversionResult, type DumpSong, type StereoProfile, type VoiceFrame,
-  ConversionResult, StereoAmiga, StereoHeadphone, StereoMono,
+  type ConversionResult, type DumpSong, type FilterFrame, type SidFrame,
+  type StereoMode, type VoiceFrame, ConversionResult, StereoHeadphone,
+  StereoMono, StereoWide,
 }
 
 pub fn make_range(start: Int, end: Int) -> List(Int) {
@@ -16,14 +18,29 @@ pub fn make_range(start: Int, end: Int) -> List(Int) {
   }
 }
 
+pub fn format_duration(seconds: Float) -> String {
+  let total_secs = float.truncate(seconds)
+  let mins = total_secs / 60
+  let secs = total_secs % 60
+  let mins_str = case mins < 10 {
+    True -> "0" <> int.to_string(mins)
+    False -> int.to_string(mins)
+  }
+  let secs_str = case secs < 10 {
+    True -> "0" <> int.to_string(secs)
+    False -> int.to_string(secs)
+  }
+  mins_str <> ":" <> secs_str
+}
+
 const sid_attack_table: List(Float) = [
-  0.002, 0.008, 0.016, 0.024, 0.038, 0.056, 0.068, 0.080, 0.100, 0.250, 0.500,
-  0.800, 1.000, 3.000, 5.000, 8.000,
+  0.002, 0.008, 0.016, 0.024, 0.038, 0.056, 0.068, 0.08, 0.1, 0.25, 0.5, 0.8,
+  1.0, 3.0, 5.0, 8.0,
 ]
 
 const sid_decay_table: List(Float) = [
-  0.006, 0.024, 0.048, 0.072, 0.114, 0.168, 0.204, 0.240, 0.300, 0.750, 1.500,
-  2.400, 3.000, 9.000, 15.000, 24.000,
+  0.006, 0.024, 0.048, 0.072, 0.114, 0.168, 0.204, 0.24, 0.3, 0.75, 1.5, 2.4,
+  3.0, 9.0, 15.0, 24.0,
 ]
 
 fn lookup_table(tbl: List(Float), index: Int, default: Float) -> Float {
@@ -58,7 +75,7 @@ pub fn res_to_q(res: Int) -> Float {
   0.707 +. { int.to_float(res) *. 0.42 }
 }
 
-fn round_float(val: Float, decimals: Int) -> String {
+pub fn format_float(val: Float, decimals: Int) -> String {
   let factor = case decimals {
     1 -> 10.0
     2 -> 100.0
@@ -97,18 +114,41 @@ pub fn init_tracker() -> VoiceTracker {
   )
 }
 
+pub type FilterTracker {
+  FilterTracker(
+    last_cutoff: Int,
+    last_res: Int,
+    last_mode: String,
+    last_vol: Int,
+    last_route_v1: Bool,
+    last_route_v2: Bool,
+    last_route_v3: Bool,
+  )
+}
+
+pub fn init_filter_tracker() -> FilterTracker {
+  FilterTracker(
+    last_cutoff: -1,
+    last_res: -1,
+    last_mode: "",
+    last_vol: -1,
+    last_route_v1: False,
+    last_route_v2: False,
+    last_route_v3: False,
+  )
+}
+
 fn wave_opcode(wave_byte: Int) -> String {
-  // Check waveform selection bits
   let is_tri = int.bitwise_and(wave_byte, 0x10) != 0
   let is_saw = int.bitwise_and(wave_byte, 0x20) != 0
   let is_pulse = int.bitwise_and(wave_byte, 0x40) != 0
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    True, _, _, _ -> "w6" // Knuth MMIX LCG white noise
-    _, True, _, _ -> "w15" // Band-limited DWGS Saw
-    _, _, True, _ -> "w16" // Band-limited DWGS Square/Pulse
-    _, _, _, True -> "w18" // Band-limited DWGS Triangle
+    True, _, _, _ -> "w6"
+    _, True, _, _ -> "w15"
+    _, _, True, _ -> "w16"
+    _, _, _, True -> "w18"
     _, _, _, _ -> "w15"
   }
 }
@@ -119,122 +159,96 @@ fn filter_mode_num(mode_str: String) -> Int {
     "Hi " -> 2
     "Bnd" -> 3
     "L+H" -> 4
-    _ -> 1
+    _ -> 0
   }
 }
 
-fn generate_voice_cmds(
-  v_num: Int,
+/// Generates space-separated Skode command tokens for a voice frame.
+/// Pattern remembers the selected voice, so voice selection is not repeated.
+fn generate_voice_step_tokens(
   vf: VoiceFrame,
   tracker: VoiceTracker,
-  filter_routed: Bool,
-  filter_mode: Int,
-  cutoff_hz: Float,
-  res_q: Float,
   mod_voice: Int,
-) -> #(String, VoiceTracker) {
-  let v_prefix = "v" <> int.to_string(v_num) <> " "
+) -> #(List(String), VoiceTracker) {
+  let tokens = []
 
   // Waveform changed
-  let #(wave_parts, next_wave) = case vf.waveform_byte != tracker.last_wave {
-    True -> #(
-      [v_prefix <> wave_opcode(vf.waveform_byte)],
-      vf.waveform_byte,
-    )
-    False -> #([], tracker.last_wave)
+  let #(tokens, next_wave) = case vf.waveform_byte != tracker.last_wave {
+    True -> #([wave_opcode(vf.waveform_byte), ..tokens], vf.waveform_byte)
+    False -> #(tokens, tracker.last_wave)
   }
 
-  // Frequency changed
-  let #(freq_parts, next_freq) = case vf.freq != tracker.last_freq && vf.freq > 0 {
-    True -> #(
-      [v_prefix <> "f" <> round_float(freq_to_hz(vf.freq), 2)],
-      vf.freq,
-    )
-    False -> #([], tracker.last_freq)
-  }
-
-  // Pulse width changed (apply CZ distortion on pulse wave)
+  // Pulse width changed (for pulse wave w16)
   let is_pulse = int.bitwise_and(vf.waveform_byte, 0x40) != 0
-  let #(pulse_parts, next_pulse) = case
+  let #(tokens, next_pulse) = case
     is_pulse && vf.pulse_width != tracker.last_pulse
   {
     True -> #(
-      [v_prefix <> "c1," <> round_float(pulse_to_cz(vf.pulse_width), 3)],
+      ["c1," <> format_float(pulse_to_cz(vf.pulse_width), 3), ..tokens],
       vf.pulse_width,
     )
-    False -> #([], tracker.last_pulse)
+    False -> #(tokens, tracker.last_pulse)
   }
 
-  // ADSR changed
-  let #(adsr_parts, next_adsr) = case vf.adsr != tracker.last_adsr {
+  // ADSR envelope changed
+  let #(tokens, next_adsr) = case vf.adsr != tracker.last_adsr {
     True -> {
       let a_sec = lookup_table(sid_attack_table, vf.attack, 0.002)
       let d_sec = lookup_table(sid_decay_table, vf.decay, 0.006)
       let s_lvl = int.to_float(vf.sustain) /. 15.0
       let r_sec = lookup_table(sid_decay_table, vf.release, 0.006)
       let adsr_str =
-        v_prefix
-        <> "t "
-        <> round_float(a_sec, 3)
+        "t"
+        <> format_float(a_sec, 3)
         <> ","
-        <> round_float(d_sec, 3)
+        <> format_float(d_sec, 3)
         <> ","
-        <> round_float(s_lvl, 2)
+        <> format_float(s_lvl, 2)
         <> ","
-        <> round_float(r_sec, 3)
-      #([adsr_str], vf.adsr)
+        <> format_float(r_sec, 3)
+      #([adsr_str, ..tokens], vf.adsr)
     }
-    False -> #([], tracker.last_adsr)
+    False -> #(tokens, tracker.last_adsr)
   }
 
-  // Ring modulation
-  let #(ring_parts, next_ring) = case vf.ring_mod != tracker.last_ring {
+  // Ring modulation changed
+  let #(tokens, next_ring) = case vf.ring_mod != tracker.last_ring {
     True -> {
       let ring_str = case vf.ring_mod {
-        True -> v_prefix <> "XM " <> int.to_string(mod_voice)
-        False -> v_prefix <> "XM -1"
+        True -> "XM " <> int.to_string(mod_voice)
+        False -> "XM -1"
       }
-      #([ring_str], vf.ring_mod)
+      #([ring_str, ..tokens], vf.ring_mod)
     }
-    False -> #([], tracker.last_ring)
+    False -> #(tokens, tracker.last_ring)
   }
 
-  // Gate transition (Note On / Off)
-  let #(gate_parts, next_gate) = case vf.gate != tracker.last_gate {
+  // Frequency and Gate transitions
+  let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
+  let gate_turned_on = vf.gate && !tracker.last_gate
+  let gate_turned_off = !vf.gate && tracker.last_gate
+
+  let #(tokens, next_freq) = case gate_turned_on {
     True -> {
-      let gate_str = case vf.gate {
-        True -> v_prefix <> "l1"
-        False -> v_prefix <> "l0"
-      }
-      #([gate_str], vf.gate)
+      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
+      #(["l1", f_str, ..tokens], vf.freq)
     }
-    False -> #([], tracker.last_gate)
+    False -> {
+      case gate_turned_off {
+        True -> #(["l0", ..tokens], tracker.last_freq)
+        False -> {
+          // Gate remains ON, frequency slid
+          case vf.gate && freq_changed {
+            True -> {
+              let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
+              #([f_str, ..tokens], vf.freq)
+            }
+            False -> #(tokens, tracker.last_freq)
+          }
+        }
+      }
+    }
   }
-
-  // Filter routing
-  let filt_parts = case filter_routed {
-    True -> [
-      v_prefix
-      <> "j"
-      <> int.to_string(filter_mode)
-      <> " k"
-      <> round_float(cutoff_hz, 1)
-      <> " q"
-      <> round_float(res_q, 2),
-    ]
-    False -> []
-  }
-
-  let all_parts =
-    list.flatten([
-      wave_parts,
-      pulse_parts,
-      adsr_parts,
-      ring_parts,
-      freq_parts,
-      filt_parts,
-      gate_parts,
-    ])
 
   let next_tracker =
     VoiceTracker(
@@ -242,151 +256,345 @@ fn generate_voice_cmds(
       last_wave: next_wave,
       last_adsr: next_adsr,
       last_pulse: next_pulse,
-      last_gate: next_gate,
+      last_gate: vf.gate,
       last_ring: next_ring,
     )
 
-  #(string.join(all_parts, "; "), next_tracker)
+  #(list.reverse(tokens), next_tracker)
+}
+
+/// Generates space-separated tokens for filter / volume changes on conductor track.
+fn generate_filter_step_tokens(
+  ff: FilterFrame,
+  tracker: FilterTracker,
+) -> #(List(String), FilterTracker) {
+  let tokens = []
+  let mode_int = filter_mode_num(ff.mode_str)
+
+  let cutoff_changed = ff.cutoff != tracker.last_cutoff
+  let res_changed = ff.resonance != tracker.last_res
+  let mode_changed = ff.mode_str != tracker.last_mode
+  let vol_changed = ff.volume != tracker.last_vol
+  let route_changed =
+    ff.route_v1 != tracker.last_route_v1
+    || ff.route_v2 != tracker.last_route_v2
+    || ff.route_v3 != tracker.last_route_v3
+
+  let #(tokens, next_cutoff, next_res, next_mode) = case
+    cutoff_changed || res_changed || mode_changed || route_changed
+  {
+    True -> {
+      let hz = format_float(cutoff_to_hz(ff.cutoff), 1)
+      let q = format_float(res_to_q(ff.resonance), 2)
+      let mode_str = int.to_string(mode_int)
+
+      let voice_cmds = []
+      let voice_cmds = case ff.route_v1 {
+        True -> ["v0 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
+        False ->
+          case tracker.last_route_v1 {
+            True -> ["v0 J0", ..voice_cmds]
+            False -> voice_cmds
+          }
+      }
+      let voice_cmds = case ff.route_v2 {
+        True -> ["v1 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
+        False ->
+          case tracker.last_route_v2 {
+            True -> ["v1 J0", ..voice_cmds]
+            False -> voice_cmds
+          }
+      }
+      let voice_cmds = case ff.route_v3 {
+        True -> ["v2 J" <> mode_str <> " K" <> hz <> " Q" <> q, ..voice_cmds]
+        False ->
+          case tracker.last_route_v3 {
+            True -> ["v2 J0", ..voice_cmds]
+            False -> voice_cmds
+          }
+      }
+
+      #(list.append(voice_cmds, tokens), ff.cutoff, ff.resonance, ff.mode_str)
+    }
+    False -> #(tokens, tracker.last_cutoff, tracker.last_res, tracker.last_mode)
+  }
+
+  // Volume changes: per-voice amplitude 'a' is schedulable, while master 'V' is immediate-only.
+  let #(tokens, next_vol) = case vol_changed {
+    True -> {
+      let vol_db = case ff.volume {
+        0 -> -100
+        15 -> 0
+        v -> { v - 15 } * 2
+      }
+      let db_str = "a" <> int.to_string(vol_db)
+      #(
+        ["v0 " <> db_str <> " v1 " <> db_str <> " v2 " <> db_str, ..tokens],
+        ff.volume,
+      )
+    }
+    False -> #(tokens, tracker.last_vol)
+  }
+
+  let next_tracker =
+    FilterTracker(
+      last_cutoff: next_cutoff,
+      last_res: next_res,
+      last_mode: next_mode,
+      last_vol: next_vol,
+      last_route_v1: ff.route_v1,
+      last_route_v2: ff.route_v2,
+      last_route_v3: ff.route_v3,
+    )
+
+  #(list.reverse(tokens), next_tracker)
 }
 
 pub fn convert_song(
   song: DumpSong,
-  stereo: StereoProfile,
-) -> ConversionResult {
-  // Panning setups
-  let #(p0, p1, p2) = case stereo {
-    StereoHeadphone -> #("-0.6", "0.6", "0.0")
-    StereoAmiga -> #("-1.0", "1.0", "0.0")
-    StereoMono -> #("0.0", "0.0", "0.0")
+  stereo: StereoMode,
+) -> Result(ConversionResult, String) {
+  let frame_count = song.frame_count
+  case frame_count == 0 {
+    True -> Error("SID dump contains 0 frames.")
+    False -> {
+      let total_steps = frame_count + 1
+      let s_last = total_steps - 1
+      let duration_seconds = int.to_float(frame_count) /. 50.0
+
+      // Stereo positioning
+      let #(p0, p1, p2) = case stereo {
+        StereoHeadphone -> #("-0.6", "0.6", "0.0")
+        StereoWide -> #("-1.0", "1.0", "0.0")
+        StereoMono -> #("0.0", "0.0", "0.0")
+      }
+
+      // Initial header
+      let init_header = [
+        "# ==============================================================================",
+        "# Converted from: " <> song.title <> " (" <> song.author <> ")",
+        "# Frames: " <> int.to_string(frame_count) <> " @ 50.0 Hz (PAL C64)",
+        "# Duration: " <> format_duration(duration_seconds),
+        "# Generated for Skred v0.80.0",
+        "# ==============================================================================",
+        "",
+        "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",
+        "V -6",
+        "M 125 96",
+        "",
+        "# === INITIALIZATION ===",
+        "S0 S1 S2 S3",
+        "v0 [Voice 1] vt w16 a0 t0.002,0.008,0.5,0.01 p" <> p0,
+        "v1 [Voice 2] vt w15 a0 t0.002,0.008,0.5,0.01 p" <> p1,
+        "v2 [Voice 3] vt w18 a0 t0.002,0.008,0.5,0.01 p" <> p2,
+        "v3 [Filter] vt w0 a0",
+        "",
+        "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
+        "y0 %1",
+        "y1 %1",
+        "y2 %1",
+        "y3 %1",
+        "",
+        "# === THE MASTER CONDUCTOR ===",
+        "# y127 provides downbeat synchronization and song tracking",
+        "y127 %1 [v0] x" <> int.to_string(s_last) <> " yp127",
+        "",
+      ]
+
+      // State tracking accumulator for all 3 voices + filter
+      let initial_acc = #(
+        init_tracker(),
+        init_tracker(),
+        init_tracker(),
+        init_filter_tracker(),
+        [],
+        [],
+        [],
+        [],
+        dict.new(),
+        0,
+      )
+
+      let #(
+        _t0,
+        _t1,
+        _t2,
+        _tf,
+        ch0_lines_rev,
+        ch1_lines_rev,
+        ch2_lines_rev,
+        cond_lines_rev,
+        step_times,
+        _total_frames,
+      ) =
+        list.fold(song.frames, initial_acc, fn(acc, frame: SidFrame) {
+          let #(
+            t0,
+            t1,
+            t2,
+            tf,
+            lines0,
+            lines1,
+            lines2,
+            lines_cond,
+            times,
+            step_idx,
+          ) = acc
+
+          let cur_time = int.to_float(step_idx) /. 50.0
+          let updated_times = dict.insert(times, step_idx, cur_time)
+
+          // Step 0 must bind voice identity to each track
+          let step_str = int.to_string(step_idx)
+
+          // Voice 0 (modulated by V2)
+          let #(toks0, nt0) = generate_voice_step_tokens(frame.v1, t0, 2)
+          let toks0 = case step_idx == 0 {
+            True -> ["v0", ..toks0]
+            False -> toks0
+          }
+          let new_lines0 = case toks0 {
+            [] -> lines0
+            _ -> ["[" <> string.join(toks0, " ") <> "] x" <> step_str, ..lines0]
+          }
+
+          // Voice 1 (modulated by V0)
+          let #(toks1, nt1) = generate_voice_step_tokens(frame.v2, t1, 0)
+          let toks1 = case step_idx == 0 {
+            True -> ["v1", ..toks1]
+            False -> toks1
+          }
+          let new_lines1 = case toks1 {
+            [] -> lines1
+            _ -> ["[" <> string.join(toks1, " ") <> "] x" <> step_str, ..lines1]
+          }
+
+          // Voice 2 (modulated by V1)
+          let #(toks2, nt2) = generate_voice_step_tokens(frame.v3, t2, 1)
+          let toks2 = case step_idx == 0 {
+            True -> ["v2", ..toks2]
+            False -> toks2
+          }
+          let new_lines2 = case toks2 {
+            [] -> lines2
+            _ -> ["[" <> string.join(toks2, " ") <> "] x" <> step_str, ..lines2]
+          }
+
+          // Conductor / Filter (Track 3)
+          let #(toks_f, ntf) = generate_filter_step_tokens(frame.filter, tf)
+          let new_lines_cond = case toks_f {
+            [] -> lines_cond
+            _ -> [
+              "[" <> string.join(toks_f, " ") <> "] x" <> step_str,
+              ..lines_cond
+            ]
+          }
+
+          #(
+            nt0,
+            nt1,
+            nt2,
+            ntf,
+            new_lines0,
+            new_lines1,
+            new_lines2,
+            new_lines_cond,
+            updated_times,
+            step_idx + 1,
+          )
+        })
+
+      let s_last_str = int.to_string(s_last)
+
+      // Track 0
+      let t0_text =
+        list.reverse(ch0_lines_rev)
+        |> list.prepend("[#] x " <> s_last_str)
+        |> list.append(["[Z0 ce 127 v0] x" <> s_last_str])
+        |> string.join("\n")
+
+      // Track 1
+      let t1_text =
+        list.reverse(ch1_lines_rev)
+        |> list.prepend("[#] x " <> s_last_str)
+        |> list.append(["[v1] x" <> s_last_str])
+        |> string.join("\n")
+
+      // Track 2
+      let t2_text =
+        list.reverse(ch2_lines_rev)
+        |> list.prepend("[#] x " <> s_last_str)
+        |> list.append(["[v2] x" <> s_last_str])
+        |> string.join("\n")
+
+      // Conductor / Filter Track 3
+      let cond_text =
+        list.reverse(cond_lines_rev)
+        |> list.prepend("[#] x " <> s_last_str)
+        |> list.append(["[v3] x" <> s_last_str])
+        |> string.join("\n")
+
+      let track_blocks = [
+        "# ==============================================================================",
+        "# TRACK 0 (Voice 1)",
+        "# ==============================================================================",
+        "y0",
+        t0_text,
+        "",
+        "# ==============================================================================",
+        "# TRACK 1 (Voice 2)",
+        "# ==============================================================================",
+        "y1",
+        t1_text,
+        "",
+        "# ==============================================================================",
+        "# TRACK 2 (Voice 3)",
+        "# ==============================================================================",
+        "y2",
+        t2_text,
+        "",
+        "# ==============================================================================",
+        "# CONDUCTOR TRACK (Filter & Volume Automation)",
+        "# ==============================================================================",
+        "y3",
+        cond_text,
+        "",
+      ]
+
+      // Stop & Play Macros matching Skred v0.80.0
+      let stop_cmds = "/cer 0 Z0 O DQ ?ce!"
+      let play_cmds = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1"
+
+      let end_blocks = [
+        "# === PATTERN TRANSITIONS & END OF SONG HOOK ===",
+        "[" <> stop_cmds <> "] /ceb 4 127",
+        "/cer 1",
+        "",
+        "# === MACROS ===",
+        "# The file does not start automatically. Type 'play' to begin, and 'stop' to halt.",
+        "[play]: " <> play_cmds <> ";",
+        "[stop]: " <> stop_cmds <> ";",
+        "",
+      ]
+
+      let all_skode_lines =
+        list.flatten([init_header, track_blocks, end_blocks])
+      let full_skode = string.join(all_skode_lines, "\n")
+
+      Ok(ConversionResult(
+        skode_text: full_skode,
+        total_steps: total_steps,
+        duration_seconds: duration_seconds,
+        step_times: step_times,
+      ))
+    }
   }
+}
 
-  let header_lines = [
-    "# Generated by sid-to-skode for Skred 0.80.0",
-    "# Song: " <> song.title,
-    "# Frames: " <> int.to_string(song.frame_count) <> " @ 50 Hz",
-    "",
-    "# Global audio setup & panning",
-    "V -6",
-    "v0 p " <> p0,
-    "v1 p " <> p1,
-    "v2 p " <> p2,
-    "",
-    "# Sequence Patterns",
-  ]
-
-  let initial_state = #(
-    init_tracker(),
-    init_tracker(),
-    init_tracker(),
-    [],
-    0,
-  )
-
-  let #(_t0, _t1, _t2, pattern_lines_rev, total_steps) =
-    list.fold(song.frames, initial_state, fn(acc, frame) {
-      let #(t0, t1, t2, lines_acc, step_idx) = acc
-      let filt = frame.filter
-      let filt_hz = cutoff_to_hz(filt.cutoff)
-      let res_q = res_to_q(filt.resonance)
-      let f_mode = filter_mode_num(filt.mode_str)
-
-      // Ring modulation routing: V0 modulated by V2, V1 by V0, V2 by V1
-      let #(c0, nt0) =
-        generate_voice_cmds(
-          0,
-          frame.v1,
-          t0,
-          filt.route_v1,
-          f_mode,
-          filt_hz,
-          res_q,
-          2,
-        )
-      let #(c1, nt1) =
-        generate_voice_cmds(
-          1,
-          frame.v2,
-          t1,
-          filt.route_v2,
-          f_mode,
-          filt_hz,
-          res_q,
-          0,
-        )
-      let #(c2, nt2) =
-        generate_voice_cmds(
-          2,
-          frame.v3,
-          t2,
-          filt.route_v3,
-          f_mode,
-          filt_hz,
-          res_q,
-          1,
-        )
-
-      let active_cmds =
-        [c0, c1, c2]
-        |> list.filter(fn(c) { string.length(c) > 0 })
-
-      let step_str = case active_cmds {
-        [] -> "-"
-        _ -> "[ " <> string.join(active_cmds, " | ") <> " ]"
-      }
-
-      // Pattern formatting: 64 steps per pattern
-      let pat_idx = step_idx / 64
-      let pat_step = step_idx % 64
-
-      let step_line = case pat_step == 0 {
-        True ->
-          "\n# Pattern "
-          <> int.to_string(pat_idx)
-          <> "\ny"
-          <> int.to_string(pat_idx)
-          <> "\n"
-          <> step_str
-          <> " x"
-          <> int.to_string(pat_step)
-        False -> step_str <> " x" <> int.to_string(pat_step)
-      }
-
-      #(nt0, nt1, nt2, [step_line, ..lines_acc], step_idx + 1)
-    })
-
-  let pattern_code =
-    list.reverse(pattern_lines_rev)
-    |> string.join("\n")
-
-  // Pattern playlist sequencer
-  let num_patterns = { total_steps + 63 } / 64
-  let playlist_entries =
-    make_range(0, num_patterns - 1)
-    |> list.map(fn(i) { "y" <> int.to_string(i) })
-    |> string.join(" ")
-
-  let footer_lines = [
-    "",
-    "# Playlist Arrangement",
-    playlist_entries,
-    "",
-    "# Sentinel end of song trigger",
-    "[ S-1 ] ce 127",
-  ]
-
-  let full_script =
-    string.join(
-      list.flatten([header_lines, [pattern_code], footer_lines]),
-      "\n",
-    )
-
-  let duration = int.to_float(total_steps) *. 0.02
-
-  ConversionResult(
-    skode_code: full_script,
-    title: song.title,
-    duration_seconds: duration,
-    frame_count: song.frame_count,
-    step_count: total_steps,
-  )
+pub fn build_live_stereo_command(stereo: StereoMode) -> String {
+  case stereo {
+    StereoHeadphone -> "v0 p-0.6; v1 p0.6; v2 p0.0"
+    StereoWide -> "v0 p-1.0; v1 p1.0; v2 p0.0"
+    StereoMono -> "v0 p0.0; v1 p0.0; v2 p0.0"
+  }
 }

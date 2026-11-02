@@ -227,10 +227,7 @@ fn parse_filter_cell(raw: String, prev: FilterFrame) -> FilterFrame {
   )
 }
 
-fn parse_line(
-  line: String,
-  state: ParserState,
-) -> Result(ParserState, Nil) {
+fn parse_line(line: String, state: ParserState) -> Result(ParserState, Nil) {
   let trimmed = string.trim(line)
   case string.starts_with(trimmed, "|") && !string.contains(trimmed, "Frame") {
     False -> Error(Nil)
@@ -300,16 +297,14 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
 
   case count > 0 {
     True ->
-      Ok(
-        DumpSong(
-          title: title,
-          author: "Unknown Composer",
-          copyright: "C64 SID",
-          frames: reversed_frames,
-          frame_count: count,
-          frame_rate: 50.0,
-        ),
-      )
+      Ok(DumpSong(
+        title: title,
+        author: "Unknown Composer",
+        copyright: "C64 SID",
+        frames: reversed_frames,
+        frame_count: count,
+        frame_rate: 50.0,
+      ))
     False -> Error("No valid SID dump rows found in file.")
   }
 }

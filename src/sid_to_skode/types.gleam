@@ -1,10 +1,11 @@
-//// Core domain models and Lustre UI types for sid-to-skode.
+//// Domain models and Lustre UI types for sid-to-skode.
 
+import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 
-pub type StereoProfile {
+pub type StereoMode {
   StereoHeadphone
-  StereoAmiga
+  StereoWide
   StereoMono
 }
 
@@ -85,30 +86,20 @@ pub type DumpSong {
 
 pub type ConversionResult {
   ConversionResult(
-    skode_code: String,
-    title: String,
+    skode_text: String,
+    total_steps: Int,
     duration_seconds: Float,
-    frame_count: Int,
-    step_count: Int,
+    step_times: Dict(Int, Float),
   )
 }
 
-pub type DeepSidTrack {
-  DeepSidTrack(
-    id: Int,
-    name: String,
+pub type SidCatalogInfo {
+  SidCatalogInfo(
+    title: String,
     author: String,
-    copyright: String,
-    file_path: String,
-    subtunes: Int,
+    filename: String,
+    source: String,
   )
-}
-
-pub type ActiveTab {
-  TabStudio
-  TabSkodeSource
-  TabDeepSidBrowser
-  TabDumpView
 }
 
 pub type Model {
@@ -117,37 +108,36 @@ pub type Model {
     is_playing: Bool,
     is_paused: Bool,
     current_step: Int,
-    total_steps: Int,
-    master_volume_db: Float,
-    stereo_profile: StereoProfile,
-    active_tab: ActiveTab,
-    loaded_song: Option(DumpSong),
+    active_song: Option(DumpSong),
     conversion: Option(ConversionResult),
     is_converting: Bool,
     error_message: Option(String),
+    status_text: String,
+    active_tab: String,
+    catalog_info: Option(SidCatalogInfo),
+    stereo_mode: StereoMode,
+    master_volume: Int,
     raw_dump_text: String,
-    deep_sid_query: String,
-    deep_sid_results: List(DeepSidTrack),
-    is_searching: Bool,
   )
 }
 
 pub type Msg {
-  EngineReady
-  UserLoadedDump(name: String, content: String)
-  UserTriggerPlay
-  UserTriggerPause
-  UserTriggerStop
-  UserSetStereo(StereoProfile)
-  UserSetVolume(Float)
-  UserSelectTab(ActiveTab)
-  EngineStepUpdated(Int)
-  EnginePlaybackEnded
-  SearchDeepSid(String)
-  DeepSidSearchResults(Result(List(DeepSidTrack), String))
-  LoadDeepSidTrack(DeepSidTrack)
-  DeepSidTrackDownloaded(Result(String, String))
-  CopySkodeToClipboard
-  DownloadSkodeFile
-  DismissError
+  EngineStatusChanged(Bool)
+  FileDropped(name: String, data: BitArray)
+  DumpTextReady(name: String, dump_text: String)
+  PlayClicked
+  PauseClicked
+  ResumeClicked
+  StopClicked
+  PlaybackStepChanged(step: Int, total_steps: Int)
+  PlaybackEnded
+  DownloadSkodeClicked
+  ResetClicked
+  TabSelected(String)
+  PanicClicked
+  LoadDemo(url: String, filename: String, title: String, author: String)
+  RandomSidClicked
+  StereoModeChanged(StereoMode)
+  MasterVolumeChanged(Int)
+  CopySkodeClicked
 }

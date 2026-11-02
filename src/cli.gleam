@@ -112,33 +112,40 @@ pub fn main() {
                 <> ")\n",
               )
 
-              let result = converter.convert_song(song, StereoHeadphone)
-              let out_path = case opts.output_file {
-                Some(p) -> p
-                None -> {
-                  case string.ends_with(in_path, ".dump") {
-                    True -> string.drop_end(in_path, 5) <> ".sk"
-                    False -> in_path <> ".sk"
-                  }
-                }
-              }
-
-              case write_text_file(out_path, result.skode_code) {
-                Error(write_err) -> {
-                  print_stderr(
-                    "Error writing output file: " <> write_err <> "\n",
-                  )
+              case converter.convert_song(song, StereoHeadphone) {
+                Error(conv_err) -> {
+                  print_stderr("Conversion error: " <> conv_err <> "\n")
                   exit_process(1)
                 }
-                Ok(_) -> {
-                  print_stdout(
-                    "==> Successfully generated Skode script: "
-                    <> out_path
-                    <> " ("
-                    <> int.to_string(result.step_count)
-                    <> " steps)\n",
-                  )
-                  exit_process(0)
+                Ok(result) -> {
+                  let out_path = case opts.output_file {
+                    Some(p) -> p
+                    None -> {
+                      case string.ends_with(in_path, ".dump") {
+                        True -> string.drop_end(in_path, 5) <> ".sk"
+                        False -> in_path <> ".sk"
+                      }
+                    }
+                  }
+
+                  case write_text_file(out_path, result.skode_text) {
+                    Error(write_err) -> {
+                      print_stderr(
+                        "Error writing output file: " <> write_err <> "\n",
+                      )
+                      exit_process(1)
+                    }
+                    Ok(_) -> {
+                      print_stdout(
+                        "==> Successfully generated Skode script: "
+                        <> out_path
+                        <> " ("
+                        <> int.to_string(result.total_steps)
+                        <> " steps)\n",
+                      )
+                      exit_process(0)
+                    }
+                  }
                 }
               }
             }
