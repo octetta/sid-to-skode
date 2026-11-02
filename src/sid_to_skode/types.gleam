@@ -140,4 +140,5 @@ pub type Msg {
   StereoModeChanged(StereoMode)
   MasterVolumeChanged(Int)
   CopySkodeClicked
+  ConversionFailed(String)
 }

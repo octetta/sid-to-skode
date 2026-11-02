@@ -19,12 +19,12 @@ import sid_to_skode/converter
 import sid_to_skode/dump_parser
 import sid_to_skode/types.{
   type DumpSong, type FilterFrame, type Model, type Msg, type VoiceFrame,
-  CopySkodeClicked, DownloadSkodeClicked, DumpTextReady, EngineStatusChanged,
-  FileDropped, FilterFrame, LoadDemo, MasterVolumeChanged, Model, PanicClicked,
-  PauseClicked, PlayClicked, PlaybackEnded, PlaybackStepChanged,
-  RandomSidClicked, ResetClicked, ResumeClicked, SidFrame, StereoHeadphone,
-  StereoModeChanged, StereoMono, StereoWide, StopClicked, TabSelected,
-  VoiceFrame,
+  ConversionFailed, CopySkodeClicked, DownloadSkodeClicked, DumpTextReady,
+  EngineStatusChanged, FileDropped, FilterFrame, LoadDemo, MasterVolumeChanged,
+  Model, PanicClicked, PauseClicked, PlayClicked, PlaybackEnded,
+  PlaybackStepChanged, RandomSidClicked, ResetClicked, ResumeClicked, SidFrame,
+  StereoHeadphone, StereoModeChanged, StereoMono, StereoWide, StopClicked,
+  TabSelected, VoiceFrame,
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ fn load_demo_effect(
       title,
       author,
       fn(name, content, _t, _a) { dispatch(DumpTextReady(name, content)) },
-      fn(_err) { dispatch(PlaybackEnded) },
+      fn(err) { dispatch(ConversionFailed(err)) },
     )
   })
 }
@@ -171,7 +171,7 @@ fn random_sid_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
     js_fetch_random_sid(
       fn(name, content, _t, _a) { dispatch(DumpTextReady(name, content)) },
-      fn(_err) { dispatch(PlaybackEnded) },
+      fn(err) { dispatch(ConversionFailed(err)) },
     )
   })
 }
@@ -229,6 +229,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(model, effect.none())
     }
 
+    ConversionFailed(err) -> {
+      #(
+        Model(
+          ..model,
+          is_converting: False,
+          error_message: Some(err),
+          status_text: "SID conversion error: " <> err,
+        ),
+        stop_effect(),
+      )
+    }
+
     DumpTextReady(filename, content) -> {
       let stop_eff = stop_effect()
       case dump_parser.parse_dump(content, filename) {
@@ -236,6 +248,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           #(
             Model(
               ..model,
+              is_converting: False,
               error_message: Some(err),
               status_text: "Dump parser error: " <> err,
             ),
@@ -248,6 +261,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
               #(
                 Model(
                   ..model,
+                  is_converting: False,
                   active_song: Some(song),
                   error_message: Some(err),
                   status_text: "Conversion error: " <> err,
@@ -263,6 +277,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
               #(
                 Model(
                   ..model,
+                  is_converting: False,
                   active_song: Some(song),
                   conversion: Some(conv),
                   raw_dump_text: content,

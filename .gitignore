@@ -6,3 +6,4 @@ node_modules/
 demos/*.sk
 .DS_Store
 *history.txt
+mini-skred-history.txt
