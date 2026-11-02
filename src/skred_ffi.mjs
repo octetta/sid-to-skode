@@ -277,12 +277,6 @@ export function initEngine(callback) {
     console.log("[sid-to-skode] Skred WASM runtime initialized.");
     moduleReady = true;
 
-    try {
-      ensureEngineRunning();
-    } catch (err) {
-      console.error("[sid-to-skode] Error initializing Skred audio:", err);
-    }
-
     if (callback) callback(true);
   };
 
