@@ -243,16 +243,127 @@ fn generate_voice_step_tokens(
   #(list.reverse(tokens), next_tracker)
 }
 
-/// Generates space-separated tokens for volume changes on conductor track.
+pub fn filter_mode_int(mode_str: String) -> Int {
+  case mode_str {
+    "Low" | "LP" | "lp" -> 1
+    "Hig" | "HP" | "hp" -> 2
+    "Bnd" | "BP" | "bp" -> 3
+    "L+H" | "Not" | "not" -> 4
+    "LBH" | "All" | "all" -> 5
+    "L+B" -> 1
+    "B+H" -> 2
+    _ -> 0
+  }
+}
+
+fn voice_filter_tokens(
+  v_idx: Int,
+  is_routed: Bool,
+  was_routed: Bool,
+  mode_int: Int,
+  prev_mode_int: Int,
+  cutoff_changed: Bool,
+  res_changed: Bool,
+  hz_str: String,
+  q_str: String,
+) -> List(String) {
+  let is_filtered = mode_int > 0 && is_routed
+  let was_filtered = prev_mode_int > 0 && was_routed
+  let v_tag = "v" <> int.to_string(v_idx)
+
+  case was_filtered, is_filtered {
+    // Was filtered, now turned off
+    True, False -> [v_tag, "j0"]
+
+    // Turned on
+    False, True -> [
+      v_tag,
+      "j" <> int.to_string(mode_int),
+      "k" <> hz_str,
+      "q" <> q_str,
+    ]
+
+    // Still filtered
+    True, True -> {
+      let mode_changed = mode_int != prev_mode_int
+      case mode_changed, cutoff_changed, res_changed {
+        True, _, _ -> [
+          v_tag,
+          "j" <> int.to_string(mode_int),
+          "k" <> hz_str,
+          "q" <> q_str,
+        ]
+        False, True, True -> [v_tag, "k" <> hz_str, "q" <> q_str]
+        False, True, False -> [v_tag, "k" <> hz_str]
+        False, False, True -> [v_tag, "q" <> q_str]
+        False, False, False -> []
+      }
+    }
+
+    // Unfiltered before and after
+    False, False -> []
+  }
+}
+
+/// Generates space-separated tokens for volume and filter changes on conductor track.
 fn generate_filter_step_tokens(
   ff: FilterFrame,
   tracker: FilterTracker,
 ) -> #(List(String), FilterTracker) {
-  let tokens = []
-  let vol_changed = ff.volume != tracker.last_vol
+  let mode_int = filter_mode_int(ff.mode_str)
+  let prev_mode_int = filter_mode_int(tracker.last_mode)
+
+  let cutoff_changed = ff.cutoff != tracker.last_cutoff
+  let res_changed = ff.resonance != tracker.last_res
+
+  let hz_str = format_float(cutoff_to_hz(ff.cutoff), 1)
+  let q_str = format_float(res_to_q(ff.resonance), 2)
+
+  let v0_toks =
+    voice_filter_tokens(
+      0,
+      ff.route_v1,
+      tracker.last_route_v1,
+      mode_int,
+      prev_mode_int,
+      cutoff_changed,
+      res_changed,
+      hz_str,
+      q_str,
+    )
+
+  let v1_toks =
+    voice_filter_tokens(
+      1,
+      ff.route_v2,
+      tracker.last_route_v2,
+      mode_int,
+      prev_mode_int,
+      cutoff_changed,
+      res_changed,
+      hz_str,
+      q_str,
+    )
+
+  let v2_toks =
+    voice_filter_tokens(
+      2,
+      ff.route_v3,
+      tracker.last_route_v3,
+      mode_int,
+      prev_mode_int,
+      cutoff_changed,
+      res_changed,
+      hz_str,
+      q_str,
+    )
+
+  let filter_tokens =
+    list.flatten([v0_toks, v1_toks, v2_toks])
 
   // Volume changes: per-voice amplitude 'a' is schedulable, while master 'V' is immediate-only.
-  let #(tokens, next_vol) = case vol_changed {
+  let vol_changed = ff.volume != tracker.last_vol
+  let #(vol_tokens, next_vol) = case vol_changed {
     True -> {
       let vol_db = case ff.volume {
         0 -> -100
@@ -261,12 +372,14 @@ fn generate_filter_step_tokens(
       }
       let db_str = "a" <> int.to_string(vol_db)
       #(
-        ["v0 " <> db_str <> " v1 " <> db_str <> " v2 " <> db_str, ..tokens],
+        ["v0", db_str, "v1", db_str, "v2", db_str],
         ff.volume,
       )
     }
-    False -> #(tokens, tracker.last_vol)
+    False -> #([], tracker.last_vol)
   }
+
+  let all_tokens = list.append(vol_tokens, filter_tokens)
 
   let next_tracker =
     FilterTracker(
@@ -279,7 +392,7 @@ fn generate_filter_step_tokens(
       last_route_v3: ff.route_v3,
     )
 
-  #(list.reverse(tokens), next_tracker)
+  #(all_tokens, next_tracker)
 }
 
 pub fn convert_song(

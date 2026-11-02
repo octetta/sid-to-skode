@@ -328,10 +328,12 @@ export function playSkode(script, steps) {
       executeSkredCommand("[song.sk] /ls");
       executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
+      executeSkredCommand("play");
     } else {
       executeSkredCommand(script);
       executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
+      executeSkredCommand("play");
     }
     startWasmEventPump(M);
   } catch (err) {
@@ -368,7 +370,6 @@ export function stopPlayback() {
   executeSkredCommand("stop");
   executeSkredCommand("Y-1");
   executeSkredCommand("S-1");
-  if (playbackEndedCallback) playbackEndedCallback();
 }
 
 export function setStereoProfile(mode) {

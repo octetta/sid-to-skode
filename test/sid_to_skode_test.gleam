@@ -1,3 +1,4 @@
+import gleam/string
 import gleeunit
 import gleeunit/should
 import sid_to_skode/converter
@@ -29,6 +30,35 @@ pub fn pulse_cz_conversion_test() {
   cz_min |> should.equal(-0.98)
 }
 
+pub fn filter_mode_mapping_test() {
+  converter.filter_mode_int("Low") |> should.equal(1)
+  converter.filter_mode_int("LP") |> should.equal(1)
+  converter.filter_mode_int("Hig") |> should.equal(2)
+  converter.filter_mode_int("HP") |> should.equal(2)
+  converter.filter_mode_int("Bnd") |> should.equal(3)
+  converter.filter_mode_int("BP") |> should.equal(3)
+  converter.filter_mode_int("L+H") |> should.equal(4)
+  converter.filter_mode_int("Not") |> should.equal(4)
+  converter.filter_mode_int("LBH") |> should.equal(5)
+  converter.filter_mode_int("All") |> should.equal(5)
+  converter.filter_mode_int("Off") |> should.equal(0)
+  converter.filter_mode_int("Unknown") |> should.equal(0)
+}
+
+pub fn filter_cutoff_and_resonance_test() {
+  let hz_0 = converter.cutoff_to_hz(0)
+  hz_0 |> should.equal(30.0)
+
+  let hz_mid = converter.cutoff_to_hz(1000)
+  hz_mid |> should.equal(5830.0)
+
+  let q_0 = converter.res_to_q(0)
+  q_0 |> should.equal(0.707)
+
+  let q_15 = converter.res_to_q(15)
+  { q_15 >. 7.0 } |> should.be_true
+}
+
 pub fn dump_parse_and_convert_test() {
   let sample_dump =
     "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
@@ -45,4 +75,35 @@ pub fn dump_parse_and_convert_test() {
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
   res.total_steps |> should.equal(5)
   res.duration_seconds |> should.equal(0.08)
+}
+
+pub fn realtime_filter_automation_test() {
+  // Frame 0: Filter off
+  // Frame 1: Lowpass filter enabled on Voice 1 (v0), Cutoff 0400 (1024), Res 1
+  // Frame 2: Cutoff slid to 0600 (1536)
+  // Frame 3: Filter turned off
+  let filter_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | AF58  E-7 D8  15 0DFB 180 | 0000  C-0 80  43 0FC4 200 | 03A9  A-1 95  41 099F 180 | 0000 00 Off F |
+|     1 | 0303 (F#1 92) 80 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | 0400 11 Low F |
+|     2 | AF58 (E-7 D8) .. .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 1AC | 0600 11 Low F |
+|     3 | 0303 (F#1 92) 14 .... ... | ....  ... ..  42 0000 ... | ....  ... ..  .. .... 1C2 | 0000 00 Off F |
+"
+
+  let assert Ok(song) = dump_parser.parse_dump(filter_dump, "Filter Tune")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Must contain lowercase realtime filter commands
+  string.contains(res.skode_text, "j1") |> should.be_true
+  string.contains(res.skode_text, "k5969.2") |> should.be_true
+  string.contains(res.skode_text, "q1.13") |> should.be_true
+  string.contains(res.skode_text, "k8938.8") |> should.be_true
+  string.contains(res.skode_text, "j0") |> should.be_true
+
+  // Must NOT contain immediate-only uppercase filter commands inside pattern steps
+  string.contains(res.skode_text, "] x") |> should.be_true
+  string.contains(res.skode_text, " J") |> should.be_false
+  string.contains(res.skode_text, " K") |> should.be_false
+  string.contains(res.skode_text, " Q") |> should.be_false
 }

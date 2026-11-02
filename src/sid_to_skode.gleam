@@ -242,7 +242,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     DumpTextReady(filename, content) -> {
-      let stop_eff = stop_effect()
+      let stop_eff = case model.is_playing {
+        True -> stop_effect()
+        False -> effect.none()
+      }
       case dump_parser.parse_dump(content, filename) {
         Error(err) -> {
           #(
@@ -376,7 +379,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           current_step: 0,
           status_text: "Playback finished.",
         ),
-        stop_effect(),
+        effect.none(),
       )
     }
 
