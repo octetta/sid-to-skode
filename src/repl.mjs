@@ -88,7 +88,6 @@ function handleCommand(cmd) {
       `=== SKRED v0.80.0 COMMAND REFERENCE ===
 • Voices & Waves:
   v<0..255>       Select voice (e.g. 'v0')
-  vt              Voice trigger
   w<0..24>        Set waveform:
                   w15: Analog Sawtooth (SID Saw)
                   w16: Analog Square / Pulse (SID Square/PWM)
@@ -98,7 +97,7 @@ function handleCommand(cmd) {
   t<a,d,s,r>      Set ADSR envelope (e.g. 't0.002,0.008,0.5,0.01')
   p<pan>          Set stereo pan -1.0 (L) to 1.0 (R), 0.0 = center
   f<hz>           Set frequency in Hz (e.g. 'f440')
-  l<0|1>          Gate toggle: l1 = Gate ON, l0 = Gate OFF
+  l<0|1>          Gate & Attack: l1 = Gate ON (Attack), l0 = Gate OFF (Release)
   c1,<duty>       CZ Phase-Distortion PWM (-0.98 to +0.98, 0.0 = 50% square)
   XM<mod>,<1|0>   Ring modulation from voice <mod> (e.g. 'XM2,1')
 
@@ -179,7 +178,7 @@ function explainSkodeCommand(cmd, exitCode) {
       currentVoice = part.toLowerCase();
       sawAction = true;
     } else if (/^vt$/i.test(part)) {
-      details.push("Voice Trigger (vt)");
+      details.push("Voice Text Set (vt - immediate only)");
       sawAction = true;
     } else if (/^l[01]$/i.test(part)) {
       details.push(part === "l1" ? "Gate ON (l1)" : "Gate OFF (l0)");
@@ -272,7 +271,7 @@ export function createReplDom() {
     <div id="skred-repl-output" class="repl-output"></div>
     <div class="repl-chips">
       <span class="repl-chip-label">Quick:</span>
-      <button class="repl-chip" data-cmd="v0 vt w16 a-8 f440 l1">v0 A440 ON</button>
+      <button class="repl-chip" data-cmd="v0 w16 a-8 f440 l1">v0 A440 ON</button>
       <button class="repl-chip" data-cmd="v0 l0">v0 Gate OFF</button>
       <button class="repl-chip" data-cmd="V -8">V -8</button>
       <button class="repl-chip" data-cmd="j1 k1200 q2.0">Lowpass 1.2k</button>
@@ -283,7 +282,7 @@ export function createReplDom() {
     </div>
     <form id="skred-repl-form" class="repl-input-row" autocomplete="off">
       <span class="repl-prompt-prefix">skred&gt;</span>
-      <input type="text" id="skred-repl-input" class="repl-input" placeholder="Type a Skred command (e.g. 'v0 vt w16 a-8 f440 l1', 'V -8', '-help')..." spellcheck="false" autocomplete="off" autocapitalize="off" />
+      <input type="text" id="skred-repl-input" class="repl-input" placeholder="Type a Skred command (e.g. 'v0 w16 a-8 f440 l1', 'V -8', '-help')..." spellcheck="false" autocomplete="off" autocapitalize="off" />
       <button type="submit" class="repl-run-btn">Run ↵</button>
     </form>
   `;

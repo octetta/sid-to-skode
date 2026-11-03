@@ -1,3 +1,4 @@
+import gleam/list
 import gleam/string
 import gleeunit
 import gleeunit/should
@@ -177,4 +178,30 @@ pub fn pulse_width_modulation_test() {
   // Frame 1 updates to 0x200 (512) -> CZ -0.75
   // Must contain phase distortion modulation c1,... on pulse wave w16
   string.contains(res.skode_text, "c1,") |> should.be_true
+}
+
+pub fn no_vt_in_pattern_steps_test() {
+  // Drums and chord changes with active gate
+  let drum_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | 022C  C-1 8C  81 0720 000 | 05C8  F-2 9D  41 0800 05A | 0B90  F-3 A9  41 0500 05A | 0000 00 Off F |
+|     1 | 332C (G-5 C3) .. 0820 ... | ....  ... ..  .. .... 0B4 | ....  ... ..  .. .... 0B4 | .... .. ... . |
+|     2 | 022C (C-1 8C) .. 0300 ... | ....  ... ..  .. .... 10E | ....  ... ..  .. .... 10E | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(drum_dump, "Whittaker Drums")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Pattern steps MUST NOT contain immediate-only 'vt'
+  // (e.g. '[vt ...]' causes # 'vt' is immediate-only and cannot be compiled into a pattern step)
+  let pattern_lines =
+    string.split(res.skode_text, "\n")
+    |> list.filter(fn(line) { string.contains(line, "] x") })
+
+  let has_vt_in_steps =
+    list.any(pattern_lines, fn(line) { string.contains(line, "vt") })
+  has_vt_in_steps |> should.be_false
+
+  // ADSR change while gate is active must trigger 'l1'
+  string.contains(res.skode_text, "l1") |> should.be_true
 }

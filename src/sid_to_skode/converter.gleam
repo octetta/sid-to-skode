@@ -230,26 +230,25 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_freq)
   }
 
-  // Emit gate event
-  let tokens = case gate_turned_on, gate_turned_off {
-    True, _ -> ["l1", ..tokens]
-    _, True -> ["l0", ..tokens]
-    False, False -> tokens
-  }
-
-  // Voice retrigger (vt) ensures notes attack crisply:
-  // 1. When gate turns on
-  // 2. When ADSR changes while gate is active (e.g. percussion hits)
-  // 3. When frequency changes after being held or when sustain is zero
-  let should_retrigger =
+  // Gate and Voice Attack events:
+  // In Skred, 'l1' (velocity 1) attacks the voice envelope.
+  // We emit 'l1' when:
+  // 1. Gate turns on (note-on).
+  // 2. Gate is held active, but ADSR parameters change (e.g. percussion hits).
+  // 3. Gate is held active, but pitch changes after sustain has reached 0.
+  // 4. Gate is held active, but pitch changes after being held (staccato re-attack).
+  // When gate turns off and voice is not attacking, we emit 'l0' (note-off/release).
+  // NOTE: 'vt' is voice-text-set and is IMMEDIATE-ONLY; never compile 'vt' into pattern steps!
+  let should_attack =
     gate_turned_on
     || { vf.gate && adsr_changed }
     || { vf.gate && freq_changed && tracker.frames_held >= 2 }
     || { vf.gate && freq_changed && vf.sustain == 0 }
 
-  let tokens = case should_retrigger {
-    True -> ["vt", ..tokens]
-    False -> tokens
+  let tokens = case should_attack, gate_turned_off {
+    True, _ -> ["l1", ..tokens]
+    False, True -> ["l0", ..tokens]
+    False, False -> tokens
   }
 
   let next_frames_held = case freq_changed {
