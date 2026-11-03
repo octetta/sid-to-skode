@@ -12,19 +12,19 @@ import gleam/string
 import lustre
 import lustre/attribute.{class, href, id, rel, target, title, type_}
 import lustre/effect.{type Effect}
-import lustre/element.{type Element, text}
+import lustre/element.{type Element, none, text}
 import lustre/element/html
 import lustre/event
 import sid_to_skode/converter
 import sid_to_skode/dump_parser
 import sid_to_skode/types.{
-  type DumpSong, type FilterFrame, type Model, type Msg, type VoiceFrame,
-  ConversionFailed, CopySkodeClicked, DownloadSkodeClicked, DumpTextReady,
-  EngineStatusChanged, FileDropped, FilterFrame, LoadDemo, MasterVolumeChanged,
-  Model, PanicClicked, PauseClicked, PlayClicked, PlaybackEnded,
-  PlaybackStepChanged, RandomSidClicked, ResetClicked, ResumeClicked, SidFrame,
-  StereoHeadphone, StereoModeChanged, StereoMono, StereoWide, StopClicked,
-  TabSelected, ToggleReplClicked, VoiceFrame,
+  type DumpSong, type FilterFrame, type Model, type Msg, type SidFrame,
+  type VoiceFrame, ConversionFailed, CopySkodeClicked, DownloadSkodeClicked,
+  DumpTextReady, EngineStatusChanged, FileDropped, FilterFrame, LoadDemo,
+  MasterVolumeChanged, Model, PanicClicked, PauseClicked, PlayClicked,
+  PlaybackEnded, PlaybackStepChanged, RandomSidClicked, ResetClicked,
+  ResumeClicked, SidFrame, StereoHeadphone, StereoModeChanged, StereoMono,
+  StereoWide, StopClicked, TabSelected, ToggleReplClicked, VoiceFrame,
 }
 
 // ---------------------------------------------------------------------------
@@ -511,22 +511,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         StereoWide -> "Stereo separation: 🔊 Wide (100%)."
         StereoMono -> "Stereo separation: 📻 Mono (0%)."
       }
-      let re_conv = case model.active_song {
-        Some(song) -> {
-          case converter.convert_song(song, new_mode) {
-            Ok(c) -> Some(c)
-            Error(_) -> model.conversion
-          }
-        }
-        None -> model.conversion
-      }
       #(
-        Model(
-          ..model,
-          stereo_mode: new_mode,
-          conversion: re_conv,
-          status_text: mode_desc,
-        ),
+        Model(..model, stereo_mode: new_mode, status_text: mode_desc),
         send_command_effect(live_cmd),
       )
     }
@@ -1416,15 +1402,33 @@ fn info_row(label: String, val: String) -> Element(Msg) {
   ])
 }
 
+fn hex4(n: Int) -> String {
+  let s = int.to_base16(n)
+  case string.length(s) {
+    1 -> "000" <> s
+    2 -> "00" <> s
+    3 -> "0" <> s
+    _ -> s
+  }
+}
+
+fn hex2(n: Int) -> String {
+  let s = int.to_base16(n)
+  case string.length(s) {
+    1 -> "0" <> s
+    _ -> s
+  }
+}
+
 fn view_tab_voices(model: Model, song: DumpSong) -> Element(Msg) {
   let step_idx = case model.is_playing {
     True -> int.min(model.current_step, song.frame_count - 1)
     False -> 0
   }
 
-  let frame = case list.drop(song.frames, step_idx) {
-    [f, ..] -> f
-    [] ->
+  let frame = case dict.get(song.frame_dict, step_idx) {
+    Ok(f) -> f
+    Error(_) ->
       SidFrame(
         step_idx,
         default_voice_frame(),
@@ -1435,13 +1439,105 @@ fn view_tab_voices(model: Model, song: DumpSong) -> Element(Msg) {
   }
 
   html.div([class("voices-tab-layout")], [
+    view_register_strip(step_idx, song.frame_count, frame),
     html.div([class("voices-grid")], [
-      view_voice_channel_card(0, "Voice 1", frame.v1),
-      view_voice_channel_card(1, "Voice 2", frame.v2),
-      view_voice_channel_card(2, "Voice 3", frame.v3),
+      view_voice_channel_card(0, "Voice 1", "$D400-$D406", frame.v1),
+      view_voice_channel_card(1, "Voice 2", "$D407-$D40D", frame.v2),
+      view_voice_channel_card(2, "Voice 3", "$D40E-$D414", frame.v3),
     ]),
     view_filter_card(frame.filter),
   ])
+}
+
+fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
+  let v1 = frame.v1
+  let v2 = frame.v2
+  let v3 = frame.v3
+  let flt = frame.filter
+
+  html.div([class("sid-reg-strip card")], [
+    html.div([class("reg-strip-header")], [
+      html.div([class("reg-strip-title")], [
+        html.span([class("reg-title-icon")], [text("⚡")]),
+        html.span([class("reg-title-text")], [
+          text("LIVE SID REGISTER ACTIVITY"),
+        ]),
+        html.span([class("reg-step-badge mono")], [
+          text(
+            "Frame #"
+            <> int.to_string(step + 1)
+            <> " / "
+            <> int.to_string(total),
+          ),
+        ]),
+      ]),
+      html.span([class("reg-pal-badge mono")], [
+        text("50.0 Hz PAL · 20.0ms tick"),
+      ]),
+    ]),
+    html.div([class("reg-blocks-row mono")], [
+      reg_block("V1 $D400", [
+        reg_val("Freq", "$" <> hex4(v1.freq), v1.freq_changed),
+        reg_val("PW", "$" <> hex4(v1.pulse_width), v1.pulse_changed),
+        reg_val("Ctrl", "$" <> hex2(v1.waveform_byte), v1.wave_changed),
+        reg_val("ADSR", "$" <> hex4(v1.adsr), v1.adsr_changed),
+      ]),
+      reg_block("V2 $D407", [
+        reg_val("Freq", "$" <> hex4(v2.freq), v2.freq_changed),
+        reg_val("PW", "$" <> hex4(v2.pulse_width), v2.pulse_changed),
+        reg_val("Ctrl", "$" <> hex2(v2.waveform_byte), v2.wave_changed),
+        reg_val("ADSR", "$" <> hex4(v2.adsr), v2.adsr_changed),
+      ]),
+      reg_block("V3 $D40E", [
+        reg_val("Freq", "$" <> hex4(v3.freq), v3.freq_changed),
+        reg_val("PW", "$" <> hex4(v3.pulse_width), v3.pulse_changed),
+        reg_val("Ctrl", "$" <> hex2(v3.waveform_byte), v3.wave_changed),
+        reg_val("ADSR", "$" <> hex4(v3.adsr), v3.adsr_changed),
+      ]),
+      reg_block("FLT $D415", [
+        reg_val("Cutoff", "$" <> hex4(flt.cutoff), flt.cutoff_changed),
+        reg_val("Res/R", "$" <> hex2(flt.res_routing), flt.ctrl_changed),
+        reg_val(
+          "Mode/Vol",
+          "$" <> hex2(flt.volume),
+          flt.vol_changed || flt.mode_changed,
+        ),
+      ]),
+    ]),
+  ])
+}
+
+fn reg_block(label: String, items: List(Element(Msg))) -> Element(Msg) {
+  html.div([class("reg-block")], [
+    html.div([class("reg-block-header")], [text(label)]),
+    html.div([class("reg-block-items")], items),
+  ])
+}
+
+fn reg_val(name: String, val: String, changed: Bool) -> Element(Msg) {
+  html.div(
+    [
+      class(case changed {
+        True -> "reg-cell reg-cell-changed"
+        False -> "reg-cell"
+      }),
+    ],
+    [
+      html.span([class("reg-cell-name")], [text(name)]),
+      html.span([class("reg-cell-val")], [text(val)]),
+      case changed {
+        True ->
+          html.span(
+            [
+              class("reg-delta-dot"),
+              title("Register modified on this frame"),
+            ],
+            [text("Δ")],
+          )
+        False -> none()
+      },
+    ],
+  )
 }
 
 fn default_voice_frame() -> VoiceFrame {
@@ -1488,6 +1584,7 @@ fn default_filter_frame() -> FilterFrame {
 fn view_voice_channel_card(
   c: Int,
   label: String,
+  addr_range: String,
   vf: VoiceFrame,
 ) -> Element(Msg) {
   let hz = converter.freq_to_hz(vf.freq)
@@ -1504,7 +1601,10 @@ fn view_voice_channel_card(
 
   html.div([class("voice-card")], [
     html.div([class("voice-card-header")], [
-      html.h4([class("voice-title")], [text(label)]),
+      html.div([class("voice-title-group")], [
+        html.h4([class("voice-title")], [text(label)]),
+        html.span([class("voice-addr-badge mono")], [text(addr_range)]),
+      ]),
       html.span(
         [
           class(case vf.gate {
@@ -1521,18 +1621,33 @@ fn view_voice_channel_card(
       ),
     ]),
     html.div([class("voice-specs-grid")], [
-      spec_item("Note / Freq", vf.note_name <> " (" <> hz_str <> ")"),
-      spec_item("Waveform", wave_desc),
-      spec_item("Pulse Width", duty_pct),
-      spec_item(
-        "ADSR (sec)",
+      spec_item_with_delta(
+        "Note / Freq",
+        vf.note_name <> " (" <> hz_str <> ") · $" <> hex4(vf.freq),
+        vf.freq_changed,
+      ),
+      spec_item_with_delta(
+        "Waveform",
+        wave_desc <> " · $" <> hex2(vf.waveform_byte),
+        vf.wave_changed,
+      ),
+      spec_item_with_delta(
+        "Pulse Width",
+        duty_pct <> " · $" <> hex4(vf.pulse_width),
+        vf.pulse_changed,
+      ),
+      spec_item_with_delta(
+        "ADSR",
         int.to_string(vf.attack)
-          <> " / "
+          <> "/"
           <> int.to_string(vf.decay)
-          <> " / "
+          <> "/"
           <> int.to_string(vf.sustain)
-          <> " / "
-          <> int.to_string(vf.release),
+          <> "/"
+          <> int.to_string(vf.release)
+          <> " · $"
+          <> hex4(vf.adsr),
+        vf.adsr_changed,
       ),
       spec_item("Modulation", case vf.ring_mod, vf.sync {
         True, True -> "RingMod + HardSync"
@@ -1555,32 +1670,77 @@ fn spec_item(label: String, val: String) -> Element(Msg) {
   ])
 }
 
+fn spec_item_with_delta(
+  label: String,
+  val: String,
+  changed: Bool,
+) -> Element(Msg) {
+  html.div(
+    [
+      class(case changed {
+        True -> "spec-item spec-item-changed"
+        False -> "spec-item"
+      }),
+    ],
+    [
+      html.div([class("spec-label-row")], [
+        html.span([class("spec-label")], [text(label)]),
+        case changed {
+          True -> html.span([class("delta-badge")], [text("Δ WRITE")])
+          False -> none()
+        },
+      ]),
+      html.span([class("spec-val mono")], [text(val)]),
+    ],
+  )
+}
+
 fn view_filter_card(ff: FilterFrame) -> Element(Msg) {
   let cutoff_hz = converter.cutoff_to_hz(ff.cutoff)
   let q_res = converter.res_to_q(ff.resonance)
 
   html.div([class("filter-card")], [
     html.div([class("filter-header")], [
-      html.h4([class("filter-title")], [
-        text("Biquad Filter & Routing (Track 3)"),
+      html.div([class("filter-title-group")], [
+        html.h4([class("filter-title")], [
+          text("Biquad Filter & Routing (Track 3)"),
+        ]),
+        html.span([class("filter-addr-badge mono")], [text("$D415-$D418")]),
       ]),
       html.span([class("badge-engine")], [text("Mode: " <> ff.mode_str)]),
     ]),
     html.div([class("filter-specs-grid")], [
-      spec_item(
-        "Cutoff Frequency",
-        converter.format_float(cutoff_hz, 1) <> " Hz",
+      spec_item_with_delta(
+        "Cutoff (k)",
+        converter.format_float(cutoff_hz, 1) <> " Hz · $" <> hex4(ff.cutoff),
+        ff.cutoff_changed,
       ),
-      spec_item("Resonance (Q)", converter.format_float(q_res, 2)),
-      spec_item("Routed Voices", case ff.route_v1, ff.route_v2, ff.route_v3 {
-        True, True, True -> "Voice 1, Voice 2, Voice 3"
-        True, True, False -> "Voice 1, Voice 2"
-        True, False, False -> "Voice 1"
-        False, True, False -> "Voice 2"
-        False, False, True -> "Voice 3"
-        _, _, _ -> "None (Bypassed)"
-      }),
-      spec_item("Master Volume", int.to_string(ff.volume) <> " / 15"),
+      spec_item_with_delta(
+        "Resonance (q)",
+        "Q "
+          <> converter.format_float(q_res, 2)
+          <> " (reg "
+          <> int.to_string(ff.resonance)
+          <> ")",
+        ff.ctrl_changed,
+      ),
+      spec_item_with_delta(
+        "Channel Routing",
+        case ff.route_v1, ff.route_v2, ff.route_v3 {
+          True, True, True -> "Voices 1, 2, 3 filtered"
+          True, True, False -> "Voices 1, 2 filtered"
+          True, False, False -> "Voice 1 filtered"
+          False, True, False -> "Voice 2 filtered"
+          False, False, True -> "Voice 3 filtered"
+          _, _, _ -> "None (Bypassed)"
+        },
+        ff.ctrl_changed,
+      ),
+      spec_item_with_delta(
+        "Master SID Vol",
+        int.to_string(ff.volume) <> " / 15",
+        ff.vol_changed,
+      ),
     ]),
   ])
 }

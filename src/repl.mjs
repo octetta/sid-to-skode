@@ -80,9 +80,9 @@ function handleCommand(cmd) {
   historyIndex = -1;
   currentDraft = "";
 
-  // Handle special built-ins
+  // Handle special REPL meta-commands (prefixed with '-' to avoid collision with Skode/Skred atoms)
   const lower = cmd.toLowerCase();
-  if (lower === "help" || lower === "?") {
+  if (lower === "-help" || lower === "-?") {
     appendReplOutput(
       "info",
       `=== SKRED v0.80.0 COMMAND REFERENCE ===
@@ -107,28 +107,28 @@ function handleCommand(cmd) {
   k<hz>           Cutoff frequency (e.g. 'k1200')
   q<q>            Resonance Q factor (e.g. 'q2.5')
 
-• Master & Transport:
+• Master & Transport (native Skode commands):
   V <db>          Master volume (e.g. 'V -8')
   M <bpm> <divs>  Tempo (e.g. 'M 125 96' = 50.0 Hz step clock)
   play / stop     Start / halt pattern playback
   Z2 / Z3         Pause / resume playback
   S-1 / Y-1       Silence all voices / reset all tracks
 
-• REPL Utilities:
-  help / ?        Show this cheat sheet
-  clear / cls     Clear terminal screen
-  status          Show engine status
-  panic           Emergency silence (S-1; Y-1; stop)`
+• REPL Meta-Commands (prefixed with '-'):
+  -help / -?      Show this cheat sheet
+  -clear / -cls   Clear terminal screen
+  -status         Show engine status
+  -panic          Emergency silence (S-1; Y-1; stop)`
     );
     return;
   }
 
-  if (lower === "clear" || lower === "cls") {
+  if (lower === "-clear" || lower === "-cls") {
     if (replOutput) replOutput.innerHTML = "";
     return;
   }
 
-  if (lower === "panic") {
+  if (lower === "-panic") {
     executeSkredCommand("S-1");
     executeSkredCommand("Y-1");
     executeSkredCommand("stop");
@@ -136,7 +136,7 @@ function handleCommand(cmd) {
     return;
   }
 
-  if (lower === "status") {
+  if (lower === "-status") {
     appendReplOutput(
       "info",
       `Engine active: ${ensureEngineRunning() ? "YES" : "NO"} | REPL history: ${history.length} commands`
@@ -147,11 +147,109 @@ function handleCommand(cmd) {
   // Execute Skred command via WASM
   try {
     ensureEngineRunning();
+    const prevStdoutCount = typeof window !== "undefined" && window.__skredStdout ? window.__skredStdout.length : 0;
     const ret = executeSkredCommand(cmd);
-    appendReplOutput("success", `✓ OK (exit: ${ret ?? 0})`);
+
+    // If Skred did not emit stdout, explain the command outcome clearly
+    const newStdoutCount = typeof window !== "undefined" && window.__skredStdout ? window.__skredStdout.length : 0;
+    if (newStdoutCount === prevStdoutCount) {
+      const explanation = explainSkodeCommand(cmd, ret);
+      appendReplOutput("success", explanation);
+    }
   } catch (err) {
     appendReplOutput("error", `Error: ${err.message || err}`);
   }
+}
+
+function explainSkodeCommand(cmd, exitCode) {
+  if (exitCode !== 0 && exitCode !== undefined && exitCode !== null) {
+    return `✗ Skred returned error code: ${exitCode}`;
+  }
+
+  const parts = cmd.split(/[\s;]+/);
+  const details = [];
+
+  let currentVoice = null;
+  let sawAction = false;
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    if (/^v\d+$/i.test(part)) {
+      currentVoice = part.toLowerCase();
+      sawAction = true;
+    } else if (/^vt$/i.test(part)) {
+      details.push("Voice Trigger (vt)");
+      sawAction = true;
+    } else if (/^l[01]$/i.test(part)) {
+      details.push(part === "l1" ? "Gate ON (l1)" : "Gate OFF (l0)");
+      sawAction = true;
+    } else if (/^f([0-9.]+)$/i.test(part)) {
+      const hz = parseFloat(part.slice(1));
+      details.push(`Freq: ${hz.toFixed(2)} Hz`);
+      sawAction = true;
+    } else if (/^w(\d+)$/i.test(part)) {
+      const wId = parseInt(part.slice(1), 10);
+      const wNames = {
+        1: "Square",
+        2: "Sawtooth",
+        4: "Triangle",
+        5: "Noise",
+        15: "Analog Saw (w15)",
+        16: "Analog Square (w16)",
+        18: "Analog Triangle (w18)",
+      };
+      details.push(`Wave: ${wNames[wId] || `w${wId}`}`);
+      sawAction = true;
+    } else if (/^a([+-]?\d+)$/i.test(part)) {
+      details.push(`Amp: ${part.slice(1)} dB`);
+      sawAction = true;
+    } else if (/^c1,([+-]?[0-9.]+)$/i.test(part)) {
+      details.push(`PWM: ${part.slice(3)}`);
+      sawAction = true;
+    } else if (/^t([0-9.,]+)$/i.test(part)) {
+      details.push(`ADSR: ${part.slice(1)}`);
+      sawAction = true;
+    } else if (/^p([+-]?[0-9.]+)$/i.test(part)) {
+      details.push(`Pan: ${part.slice(1)}`);
+      sawAction = true;
+    } else if (/^j([0-5])$/i.test(part)) {
+      const mNames = ["Off", "Lowpass", "Highpass", "Bandpass", "Notch", "Allpass"];
+      details.push(`Filter: ${mNames[parseInt(part.slice(1), 10)] || "Active"}`);
+      sawAction = true;
+    } else if (/^k([0-9.]+)$/i.test(part)) {
+      details.push(`Cutoff: ${part.slice(1)} Hz`);
+      sawAction = true;
+    } else if (/^q([0-9.]+)$/i.test(part)) {
+      details.push(`Resonance Q: ${part.slice(1)}`);
+      sawAction = true;
+    } else if (/^V\s*([+-]?\d+)$/i.test(part) || /^V([+-]?\d+)$/i.test(part)) {
+      const db = part.replace(/^V\s*/i, "");
+      details.push(`Master Volume: ${db} dB`);
+      sawAction = true;
+    } else if (part.toLowerCase() === "play") {
+      return "✓ Playback: Started";
+    } else if (part.toLowerCase() === "stop") {
+      return "✓ Playback: Stopped";
+    } else if (part.toLowerCase() === "z2") {
+      return "✓ Playback: Paused (Z2)";
+    } else if (part.toLowerCase() === "z3") {
+      return "✓ Playback: Resumed (Z3)";
+    } else if (part.toLowerCase() === "s-1") {
+      return "✓ Silenced all voices (S-1)";
+    } else if (part.toLowerCase() === "y-1") {
+      return "✓ Reset all pattern tracks (Y-1)";
+    }
+  }
+
+  if (currentVoice && details.length > 0) {
+    return `✓ [${currentVoice}] ${details.join(" · ")}`;
+  } else if (details.length > 0) {
+    return `✓ ${details.join(" · ")}`;
+  } else if (sawAction) {
+    return `✓ Executed in Skred (exit: 0)`;
+  }
+  return `✓ Skred executed: ${cmd} (exit: ${exitCode ?? 0})`;
 }
 
 export function createReplDom() {
@@ -178,14 +276,14 @@ export function createReplDom() {
       <button class="repl-chip" data-cmd="v0 l0">v0 Gate OFF</button>
       <button class="repl-chip" data-cmd="V -8">V -8</button>
       <button class="repl-chip" data-cmd="j1 k1200 q2.0">Lowpass 1.2k</button>
-      <button class="repl-chip" data-cmd="stop">stop</button>
       <button class="repl-chip" data-cmd="play">play</button>
-      <button class="repl-chip" data-cmd="S-1">S-1 (Panic)</button>
-      <button class="repl-chip" data-cmd="help">help</button>
+      <button class="repl-chip" data-cmd="stop">stop</button>
+      <button class="repl-chip" data-cmd="-panic">-panic</button>
+      <button class="repl-chip" data-cmd="-help">-help</button>
     </div>
     <form id="skred-repl-form" class="repl-input-row" autocomplete="off">
       <span class="repl-prompt-prefix">skred&gt;</span>
-      <input type="text" id="skred-repl-input" class="repl-input" placeholder="Type a Skred command (e.g. 'v0 vt w16 a-8 f440 l1', 'V -8', 'help')..." spellcheck="false" autocomplete="off" autocapitalize="off" />
+      <input type="text" id="skred-repl-input" class="repl-input" placeholder="Type a Skred command (e.g. 'v0 vt w16 a-8 f440 l1', 'V -8', '-help')..." spellcheck="false" autocomplete="off" autocapitalize="off" />
       <button type="submit" class="repl-run-btn">Run ↵</button>
     </form>
   `;
@@ -198,7 +296,7 @@ export function createReplDom() {
   // Initial welcome message
   appendReplOutput(
     "system",
-    "Skred v0.80.0 Audio Engine Console — Ready. Type 'help' for command cheat sheet. Press ↑ / ↓ for history."
+    "Skred v0.80.0 Audio Engine Console — Ready. Type '-help' for REPL guide. Press ↑ / ↓ for history."
   );
 
   // Wire up close & clear buttons
@@ -269,4 +367,8 @@ if (typeof window !== "undefined") {
   window.toggleSkredRepl = toggleRepl;
   window.openSkredRepl = openRepl;
   window.closeSkredRepl = closeRepl;
+  window.appendReplOutput = appendReplOutput;
+  window.__onSkredPrint = (type, text) => {
+    appendReplOutput(type, text);
+  };
 }

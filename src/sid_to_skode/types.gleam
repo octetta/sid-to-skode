@@ -79,6 +79,7 @@ pub type DumpSong {
     author: String,
     copyright: String,
     frames: List(SidFrame),
+    frame_dict: Dict(Int, SidFrame),
     frame_count: Int,
     frame_rate: Float,
   )

@@ -1,5 +1,6 @@
 //// Pure Gleam parser for siddump text output.
 
+import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/string
@@ -125,7 +126,7 @@ fn parse_voice_cell(raw: String, prev: VoiceFrame) -> VoiceFrame {
   let release = int.bitwise_and(adsr, 0x0F)
 
   // Pulse width (3 chars hex or "...")
-  let pulse_chunk = case len >= 26 {
+  let pulse_chunk = case len >= 25 {
     True -> string.slice(cell, 22, 3)
     False -> "..."
   }
@@ -294,6 +295,9 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
 
   let reversed_frames = list.reverse(final_state.frames)
   let count = list.length(reversed_frames)
+  let frame_dict =
+    list.map(reversed_frames, fn(f) { #(f.frame_index, f) })
+    |> dict.from_list
 
   case count > 0 {
     True ->
@@ -302,6 +306,7 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
         author: "Unknown Composer",
         copyright: "C64 SID",
         frames: reversed_frames,
+        frame_dict: frame_dict,
         frame_count: count,
         frame_rate: 50.0,
       ))

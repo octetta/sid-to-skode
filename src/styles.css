@@ -1719,3 +1719,247 @@ html, body {
   background: #0369a1;
 }
 
+/* ==========================================================================
+   Live SID Hardware Register Activity Strip & Delta Monitor
+   ========================================================================== */
+
+.sid-reg-strip {
+  background: #070c18;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.reg-strip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reg-strip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #38bdf8;
+}
+
+.reg-step-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.reg-pal-badge {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.reg-blocks-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .reg-blocks-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .reg-blocks-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.reg-block {
+  background: #0c1424;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reg-block-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+
+.reg-block-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reg-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.reg-cell-name {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.reg-cell-val {
+  color: #cbd5e1;
+}
+
+.reg-cell-changed {
+  background: rgba(245, 158, 11, 0.15);
+  border-left: 2px solid #f59e0b;
+}
+
+.reg-cell-changed .reg-cell-val {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.reg-delta-dot {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #f59e0b;
+  margin-left: 4px;
+  animation: pulse-dot 0.3s ease;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(1.4); }
+  100% { transform: scale(1.0); }
+}
+
+.voice-title-group,
+.filter-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-addr-badge,
+.filter-addr-badge {
+  font-size: 0.68rem;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.spec-item-changed {
+  border-left: 2px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.spec-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.delta-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+/* ==========================================================================
+   Mobile Platform & Touch Optimization (iOS / Android / Small Viewports)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .badge-analog,
+  .badge-stereo {
+    display: none !important;
+  }
+
+  .btn-terminal {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    min-height: 40px;
+  }
+
+  #skred-repl-drawer {
+    height: 75vh;
+  }
+
+  .repl-input {
+    font-size: 16px; /* Prevents iOS Safari from auto-zooming on focus */
+  }
+
+  .repl-chips {
+    padding: 8px 10px;
+  }
+
+  .repl-chip {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    min-height: 36px;
+  }
+
+  .voices-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .metadata-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .meta-item-hvsc {
+    grid-column: 1 / -1;
+  }
+
+  .demo-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .demo-buttons .btn {
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .metadata-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .brand h1 {
+    font-size: 0.95rem;
+  }
+
+  .reg-strip-title {
+    font-size: 0.75rem;
+  }
+}
+
+

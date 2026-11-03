@@ -162,3 +162,19 @@ pub fn analog_waveforms_and_headroom_test() {
   // Voice 1 WF 80 (noise) -> w5
   string.contains(res.skode_text, "w5") |> should.be_true
 }
+
+pub fn pulse_width_modulation_test() {
+  let pwm_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | AF58  E-7 D8  41 0DFB 180 | 0000  C-0 80  41 0FC4 800 | 03A9  A-1 95  41 099F 180 | 0000 00 Off F |
+|     1 | ....  ... ..  .. .... 200 | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(pwm_dump, "PWM Tune")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Voice 0 starts with pulse 0x180 (384) -> CZ ~ -0.8125
+  // Frame 1 updates to 0x200 (512) -> CZ -0.75
+  // Must contain phase distortion modulation c1,... on pulse wave w16
+  string.contains(res.skode_text, "c1,") |> should.be_true
+}

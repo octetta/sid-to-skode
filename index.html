@@ -5,33 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>sid-to-skode · C64 SID to Skode Converter &amp; Web Studio</title>
   <link rel="stylesheet" href="/src/styles.css">
-  <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (var i = 0; i < registrations.length; i++) {
-          registrations[i].unregister();
-        }
-      });
-    }
-  </script>
+  <script src="./coi-serviceworker.js"></script>
 </head>
 <body>
   <div id="app"></div>
   <script>
     window.Module = window.Module || {};
     window.__skredStdout = [];
+    window.__onSkredPrint = null;
     window.Module.print = function(...args) {
       const line = args.join(" ");
       window.__skredStdout.push(line);
+      if (typeof window.__onSkredPrint === "function") {
+        try { window.__onSkredPrint("out", line); } catch(e) {}
+      }
       console.log("[SKRED OUT]", ...args);
     };
     window.Module.printErr = function(...args) {
       const line = args.join(" ");
       window.__skredStdout.push("[ERR] " + line);
+      if (typeof window.__onSkredPrint === "function") {
+        try { window.__onSkredPrint("err", line); } catch(e) {}
+      }
       console.error("[SKRED ERR]", ...args);
     };
     window.Module.locateFile = function(path) {
-      return new URL("vendor/skred/" + path, window.location.href).href;
+      const base = window.location.pathname.endsWith("/") ? window.location.href : window.location.pathname + "/";
+      return new URL("vendor/skred/" + path, new URL(base, window.location.origin)).href;
     };
   </script>
   <script src="./vendor/skred/skred_api.js"></script>

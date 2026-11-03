@@ -100,6 +100,7 @@ pub type VoiceTracker {
     last_pulse: Int,
     last_gate: Bool,
     last_ring: Bool,
+    frames_held: Int,
   )
 }
 
@@ -111,6 +112,7 @@ pub fn init_tracker() -> VoiceTracker {
     last_pulse: -1,
     last_gate: False,
     last_ring: False,
+    frames_held: 0,
   )
 }
 
@@ -181,7 +183,8 @@ fn generate_voice_step_tokens(
   }
 
   // ADSR envelope changed
-  let #(tokens, next_adsr) = case vf.adsr != tracker.last_adsr {
+  let adsr_changed = vf.adsr != tracker.last_adsr
+  let #(tokens, next_adsr) = case adsr_changed {
     True -> {
       let a_sec = lookup_table(sid_attack_table, vf.attack, 0.002)
       let d_sec = lookup_table(sid_decay_table, vf.decay, 0.006)
@@ -218,6 +221,15 @@ fn generate_voice_step_tokens(
   let gate_turned_on = vf.gate && !tracker.last_gate
   let gate_turned_off = !vf.gate && tracker.last_gate
 
+  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
+  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
+    True -> {
+      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
+      #([f_str, ..tokens], vf.freq)
+    }
+    False -> #(tokens, tracker.last_freq)
+  }
+
   // Emit gate event
   let tokens = case gate_turned_on, gate_turned_off {
     True, _ -> ["l1", ..tokens]
@@ -225,14 +237,24 @@ fn generate_voice_step_tokens(
     False, False -> tokens
   }
 
-  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
-  // In SID chiptunes, pitch modulation (arpeggios, vibrato, portamento) continues during release.
-  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
-    True -> {
-      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
-      #([f_str, ..tokens], vf.freq)
-    }
-    False -> #(tokens, tracker.last_freq)
+  // Voice retrigger (vt) ensures notes attack crisply:
+  // 1. When gate turns on
+  // 2. When ADSR changes while gate is active (e.g. percussion hits)
+  // 3. When frequency changes after being held or when sustain is zero
+  let should_retrigger =
+    gate_turned_on
+    || { vf.gate && adsr_changed }
+    || { vf.gate && freq_changed && tracker.frames_held >= 2 }
+    || { vf.gate && freq_changed && vf.sustain == 0 }
+
+  let tokens = case should_retrigger {
+    True -> ["vt", ..tokens]
+    False -> tokens
+  }
+
+  let next_frames_held = case freq_changed {
+    True -> 0
+    False -> tracker.frames_held + 1
   }
 
   let next_tracker =
@@ -243,6 +265,7 @@ fn generate_voice_step_tokens(
       last_pulse: next_pulse,
       last_gate: vf.gate,
       last_ring: next_ring,
+      frames_held: next_frames_held,
     )
 
   #(list.reverse(tokens), next_tracker)

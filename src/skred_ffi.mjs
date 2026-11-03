@@ -124,9 +124,15 @@ export function executeSkredCommand(cmd) {
     return 0;
   }
 
+  ensureAudioContext();
+  if (typeof M._skred_logger === "function") {
+    try { M._skred_logger(1); } catch (e) {}
+  }
+
+  let res = 0;
   if (typeof M.ccall === "function") {
     try {
-      return M.ccall("skred_command", "number", ["string"], [cmd]);
+      res = M.ccall("skred_command", "number", ["string"], [cmd]);
     } catch (err) {
       console.warn("[sid-to-skode] Error executing skred command:", err);
       return -1;
@@ -134,15 +140,27 @@ export function executeSkredCommand(cmd) {
   } else if (typeof M._skred_command === "function" && typeof M.allocateUTF8 === "function") {
     try {
       const ptr = M.allocateUTF8(cmd);
-      const res = M._skred_command(ptr);
+      res = M._skred_command(ptr);
       if (typeof M._free === "function") M._free(ptr);
-      return res;
     } catch (err) {
       console.warn("[sid-to-skode] Error executing skred command ptr:", err);
       return -1;
     }
   }
-  return 0;
+
+  if (typeof M._skred_log === "function" && typeof M.UTF8ToString === "function") {
+    try {
+      const logPtr = M._skred_log();
+      if (logPtr) {
+        const text = M.UTF8ToString(logPtr);
+        if (text && text.trim().length > 0) {
+          appendReplOutput("out", text.trim());
+        }
+      }
+    } catch (e) {}
+  }
+
+  return res;
 }
 
 export function sendCommand(cmd) {
@@ -463,6 +481,11 @@ export function registerFileDrop(callback) {
       handleFile(e.target.files[0]);
     }
   });
+
+  // Check URL parameters for initial song loading (like mod-to-skode)
+  setTimeout(() => {
+    checkInitialUrlParams(callback);
+  }, 100);
 }
 
 export async function runSidDumpWasm(bytes, filename, durationSeconds) {
@@ -950,61 +973,88 @@ export async function loadDemoSid(
   targetDuration,
 ) {
   try {
-    let fetchUrl = url;
-    let sourceDesc = "🌐 HVSC Online Archive: " + url;
     let resolvedHvscPath = "";
+    let sourceDesc = "🌐 HVSC Public Archive";
+
+    let cleanUrl = (url || "").trim();
+    if (cleanUrl.startsWith("/")) cleanUrl = cleanUrl.slice(1);
 
     if (
-      url.startsWith("MUSICIANS/") ||
-      url.startsWith("GAMES/") ||
-      url.startsWith("DEMOS/")
+      cleanUrl.startsWith("MUSICIANS/") ||
+      cleanUrl.startsWith("GAMES/") ||
+      cleanUrl.startsWith("DEMOS/")
     ) {
-      // Relative HVSC path -> fetch via Vite proxy /hvsc/...
-      fetchUrl = "/hvsc/" + url;
-      sourceDesc = "🌐 HVSC Online: /" + url;
-      resolvedHvscPath = url;
-    } else if (url.startsWith("demos/")) {
-      // Check if it's one of our catalog items to get real HVSC path and duration
+      resolvedHvscPath = cleanUrl;
+      sourceDesc = "🌐 HVSC Online: /" + cleanUrl;
+    } else if (cleanUrl.startsWith("demos/")) {
       const match = HVSC_CATALOG.find(
-        (c) => c.filename === filename || url.endsWith(c.filename),
+        (c) => c.filename === filename || cleanUrl.endsWith(c.filename),
       );
       if (match) {
-        fetchUrl = "/hvsc/" + match.hvscPath;
-        sourceDesc = "🌐 HVSC Online: /" + match.hvscPath;
         resolvedHvscPath = match.hvscPath;
+        sourceDesc = "🌐 HVSC Online: /" + match.hvscPath;
         if (!targetDuration) targetDuration = match.duration;
       } else {
-        fetchUrl = url;
-        sourceDesc = "📁 Demo: " + filename;
+        resolvedHvscPath = "MUSICIANS/H/Hubbard_Rob/Commando.sid";
+        sourceDesc = "📁 Bundled Demo: " + filename;
       }
-    } else if (url.startsWith("http")) {
-      fetchUrl = url;
-      sourceDesc = "🌐 Web SID: " + url;
+    } else if (cleanUrl.startsWith("http")) {
+      sourceDesc = "🌐 Web SID: " + cleanUrl;
     }
 
-    let buf;
-    try {
-      const res = await fetch(fetchUrl);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      buf = await res.arrayBuffer();
-    } catch (fetchErr) {
-      // Fallback: If /hvsc/ proxy failed (e.g. standalone production preview), try direct mirror or bundled demo
-      const cleanPath = url.replace(/^\/?(hvsc\/)?/, "");
+    // Attempt retrieval sequence:
+    // 1. Direct public CORS CDN (GitHub raw / jsdelivr HVSC mirror)
+    // 2. Vite local dev proxy (/hvsc/)
+    // 3. Bundled high-impact fallback (demos/commando.sid)
+    let buf = null;
+    const candidates = [];
+
+    if (resolvedHvscPath) {
+      candidates.push({
+        url: "https://raw.githubusercontent.com/Rodartist/C64Music/master/" + resolvedHvscPath,
+        desc: "🌐 HVSC GitHub CDN: /" + resolvedHvscPath,
+      });
+      candidates.push({
+        url: "https://cdn.jsdelivr.net/gh/Rodartist/C64Music@master/" + resolvedHvscPath,
+        desc: "🌐 HVSC jsDelivr: /" + resolvedHvscPath,
+      });
+      candidates.push({
+        url: "/hvsc/" + resolvedHvscPath,
+        desc: "🌐 HVSC Local Proxy: /" + resolvedHvscPath,
+      });
+    } else if (cleanUrl.startsWith("http")) {
+      candidates.push({ url: cleanUrl, desc: "🌐 Direct URL: " + cleanUrl });
+    }
+
+    // Single high-impact bundled fallback (Commando)
+    const fallbackDemoUrl = typeof window !== "undefined"
+      ? new URL("demos/commando.sid", window.location.href).href
+      : "demos/commando.sid";
+    candidates.push({
+      url: fallbackDemoUrl,
+      desc: "📁 Bundled Fallback: commando.sid",
+    });
+
+    let lastError = null;
+    for (const cand of candidates) {
       try {
-        const directUrl = "https://hvsc.brona.dk/HVSC/C64Music/" + cleanPath;
-        const res2 = await fetch(directUrl);
-        if (!res2.ok) throw new Error("Direct HTTP " + res2.status);
-        buf = await res2.arrayBuffer();
-        sourceDesc = "🌐 Direct HVSC Mirror: /" + cleanPath;
-        resolvedHvscPath = cleanPath;
-      } catch (directErr) {
-        // Fallback 2: bundled demo in demos/ if present
-        const demoUrl = "demos/" + filename;
-        const res3 = await fetch(demoUrl);
-        if (!res3.ok) throw new Error("Could not load tune from online HVSC or local demos");
-        buf = await res3.arrayBuffer();
-        sourceDesc = "📁 Bundled Fallback: " + filename;
+        const res = await fetch(cand.url);
+        if (res.ok) {
+          buf = await res.arrayBuffer();
+          sourceDesc = cand.desc;
+          break;
+        }
+      } catch (e) {
+        lastError = e;
       }
+    }
+
+    if (!buf || buf.byteLength < 32) {
+      throw new Error(
+        "Could not load SID tune from public archive or fallback (" +
+          (lastError?.message || "network error") +
+          ")"
+      );
     }
 
     const dur =
@@ -1015,6 +1065,19 @@ export async function loadDemoSid(
     const dumpText = await runSidDumpWasm(new Uint8Array(buf), filename, dur);
     if (!dumpText || dumpText.length < 100) {
       throw new Error("Could not dump SID registers for " + filename);
+    }
+
+    // Update browser URL query parameter with shareable ?file=/...
+    if (typeof window !== "undefined" && window.history && window.history.replaceState) {
+      try {
+        const paramVal = resolvedHvscPath ? "/" + resolvedHvscPath : filename;
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set("file", paramVal);
+        newUrl.searchParams.delete("url");
+        newUrl.searchParams.delete("sid");
+        newUrl.searchParams.delete("tune");
+        window.history.replaceState(null, "", newUrl.toString());
+      } catch (e) {}
     }
 
     if (onSuccess) {
@@ -1031,6 +1094,102 @@ export async function loadDemoSid(
     console.error("[sid-to-skode] Error loading demo SID:", err);
     if (onError) onError(err.message || "Failed to load demo");
   }
+}
+
+export async function checkInitialUrlParams(callback) {
+  if (typeof window === "undefined" || !window.location) return false;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  let target =
+    searchParams.get("url") ||
+    searchParams.get("file") ||
+    searchParams.get("sid") ||
+    searchParams.get("tune") ||
+    searchParams.get("id");
+
+  if (!target && window.location.hash) {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash.includes("=")) {
+      const hashParams = new URLSearchParams(hash);
+      target =
+        hashParams.get("url") ||
+        hashParams.get("file") ||
+        hashParams.get("sid") ||
+        hashParams.get("tune") ||
+        hashParams.get("id");
+    } else if (hash.length > 1 && !hash.startsWith("/")) {
+      target = hash;
+    }
+  }
+
+  // If no URL parameter specified, load bundled Commando as default
+  if (!target) {
+    return loadDemoSid(
+      "demos/commando.sid",
+      "commando.sid",
+      "Commando",
+      "Rob Hubbard",
+      callback,
+      null,
+    );
+  }
+
+  target = decodeURIComponent(target).trim();
+  console.log("[sid-to-skode] Resolving startup URL parameter:", target);
+
+  let resolvedUrl = target;
+  let filename = "tune.sid";
+  let title = "Web SID";
+  let author = "C64 Composer";
+
+  // Check if target is a DeepSID URL (e.g. https://deepsid.chordian.net/?file=/MUSICIANS/W/Whittaker_David/Glider_Rider.sid)
+  if (target.includes("deepsid.chordian.net") || target.includes("?file=") || target.includes("&file=")) {
+    const match = target.match(/[?&]file=([^&#]+)/);
+    if (match) {
+      resolvedUrl = decodeURIComponent(match[1]).replace(/^\/+/, "");
+    }
+  } else if (target.startsWith("/")) {
+    resolvedUrl = target.replace(/^\/+/, "");
+  }
+
+  // Check against HVSC catalog (by filename, title, or path)
+  const normTarget = target.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normResolved = resolvedUrl.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const match = HVSC_CATALOG.find((c) => {
+    const cNormTitle = c.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cNormFile = c.filename.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cNormPath = c.hvscPath.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return (
+      cNormTitle === normTarget ||
+      cNormFile === normTarget ||
+      cNormPath.includes(normResolved) ||
+      normResolved.includes(cNormFile)
+    );
+  });
+
+  if (match) {
+    resolvedUrl = match.hvscPath;
+    filename = match.filename;
+    title = match.title;
+    author = match.author;
+  } else {
+    const lastSlash = resolvedUrl.lastIndexOf("/");
+    filename = lastSlash !== -1 ? resolvedUrl.slice(lastSlash + 1) : resolvedUrl;
+    if (!filename.toLowerCase().endsWith(".sid")) filename += ".sid";
+    title = filename.replace(/\.sid$/i, "").replace(/_/g, " ");
+  }
+
+  return loadDemoSid(
+    resolvedUrl,
+    filename,
+    title,
+    author,
+    callback,
+    (err) => {
+      console.warn("[sid-to-skode] Failed to load URL tune, falling back to Commando:", err);
+      loadDemoSid("demos/commando.sid", "commando.sid", "Commando", "Rob Hubbard", callback, null);
+    },
+  );
 }
 
 export { toggleRepl } from "./repl.mjs";
