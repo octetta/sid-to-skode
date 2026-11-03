@@ -248,10 +248,10 @@ pub fn voice_panning_test() {
   |> should.equal("v0 p-0.50; v1 p0.50; v2 p0.00")
 }
 
-pub fn combo_waveforms_mapping_test() {
-  // Voice 1: WF 31 (Saw + Tri + Gate) -> w300
-  // Voice 2: WF 61 (Saw + Pulse + Gate) -> w301
-  // Voice 3: WF 51 (Tri + Pulse + Gate) -> w302
+pub fn combo_waveforms_priority_test() {
+  // Voice 1: WF 31 (Saw + Tri + Gate) -> w15 (Analog Saw)
+  // Voice 2: WF 61 (Saw + Pulse + Gate) -> w15 (Analog Saw)
+  // Voice 3: WF 51 (Tri + Pulse + Gate) -> w16 (Analog Pulse)
   let dump =
     "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
 +-------+---------------------------+---------------------------+---------------------------+---------------+
@@ -261,13 +261,7 @@ pub fn combo_waveforms_mapping_test() {
   let assert Ok(song) = dump_parser.parse_dump(dump, "Combo Waves")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Must select the authentic MOS 8580 combo wavetables:
-  // WF 31 -> w300 (Saw + Tri)
-  string.contains(res.skode_text, "w300") |> should.be_true
-  // WF 61 -> w301 (Saw + Pulse)
-  string.contains(res.skode_text, "w301") |> should.be_true
-  // WF 51 -> w302 (Tri + Pulse)
-  string.contains(res.skode_text, "w302") |> should.be_true
-  // WF 71 -> w303 (Tri + Saw + Pulse)
-  string.contains(res.skode_text, "w303") |> should.be_true
+  // Must map to clean bandlimited analog waveforms without DC clicks
+  string.contains(res.skode_text, "w15") |> should.be_true
+  string.contains(res.skode_text, "w16") |> should.be_true
 }

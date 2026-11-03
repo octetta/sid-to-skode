@@ -166,21 +166,11 @@ fn wave_opcode(wave_byte: Int) -> String {
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    // Noise takes precedence for percussion/snare hits
     True, _, _, _ -> "w5"
-    // Tri + Saw + Pulse combo ($70) -> authentic 8580 AND wavetable
-    _, True, True, True -> "w303"
-    // Saw + Pulse combo ($60) -> authentic 8580 windowed AND wavetable
-    _, True, True, False -> "w301"
-    // Tri + Pulse combo ($50) -> authentic 8580 windowed AND wavetable
-    _, False, True, True -> "w302"
-    // Saw + Tri combo ($30) -> authentic 8580 bitwise AND wavetable
-    _, True, False, True -> "w300"
-    // Pure single waveforms
-    _, True, False, False -> "w15"
-    _, False, True, False -> "w16"
-    _, False, False, True -> "w18"
-    _, False, False, False -> "w16"
+    _, True, _, _ -> "w15"
+    _, _, True, _ -> "w16"
+    _, _, _, True -> "w18"
+    _, _, _, _ -> "w16"
   }
 }
 
