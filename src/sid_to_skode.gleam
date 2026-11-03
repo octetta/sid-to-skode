@@ -23,8 +23,9 @@ import sid_to_skode/types.{
   DumpTextReady, EngineStatusChanged, FileDropped, FilterFrame, LoadDemo,
   MasterVolumeChanged, Model, PanicClicked, PauseClicked, PlayClicked,
   PlaybackEnded, PlaybackStepChanged, RandomSidClicked, ResetClicked,
-  ResumeClicked, SidFrame, StereoHeadphone, StereoModeChanged, StereoMono,
-  StereoWide, StopClicked, TabSelected, ToggleReplClicked, VoiceFrame,
+  ResumeClicked, SidFrame, StereoCustom, StereoHeadphone, StereoModeChanged,
+  StereoMono, StereoWide, StopClicked, TabSelected, ToggleReplClicked,
+  VoiceFrame, VoicePanChanged,
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +215,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       active_tab: "info",
       catalog_info: None,
       stereo_mode: StereoMono,
+      voice_pan: #(0.0, 0.0, 0.0),
       master_volume: -8,
       raw_dump_text: "",
       source_description: "",
@@ -505,15 +507,57 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     StereoModeChanged(new_mode) -> {
+      let #(p0, p1, p2) = case new_mode {
+        StereoHeadphone -> #(-0.6, 0.6, 0.0)
+        StereoWide -> #(-1.0, 1.0, 0.0)
+        StereoMono -> #(0.0, 0.0, 0.0)
+        StereoCustom(v0, v1, v2) -> #(v0, v1, v2)
+      }
       let live_cmd = converter.build_live_stereo_command(new_mode)
       let mode_desc = case new_mode {
-        StereoHeadphone -> "Stereo separation: 🎧 Headphone (75%)."
-        StereoWide -> "Stereo separation: 🔊 Wide (100%)."
-        StereoMono -> "Stereo separation: 📻 Mono (0%)."
+        StereoHeadphone ->
+          "Stereo pan preset: 🎧 Headphone (-0.60 / +0.60 / Center)"
+        StereoWide -> "Stereo pan preset: 🔊 Wide (-1.00 / +1.00 / Center)"
+        StereoMono -> "Stereo pan preset: 📻 Authentic Mono (All centered)"
+        StereoCustom(_, _, _) -> "Custom stereo voice panning active"
       }
       #(
-        Model(..model, stereo_mode: new_mode, status_text: mode_desc),
+        Model(
+          ..model,
+          stereo_mode: new_mode,
+          voice_pan: #(p0, p1, p2),
+          status_text: mode_desc,
+        ),
         send_command_effect(live_cmd),
+      )
+    }
+
+    VoicePanChanged(v, pan) -> {
+      let clamped = float.clamp(pan, -1.0, 1.0)
+      let #(p0, p1, p2) = model.voice_pan
+      let next_pans = case v {
+        0 -> #(clamped, p1, p2)
+        1 -> #(p0, clamped, p2)
+        2 -> #(p0, p1, clamped)
+        _ -> model.voice_pan
+      }
+      let cmd = converter.build_voice_pan_command(v, clamped)
+      let status =
+        "Voice "
+        <> int.to_string(v + 1)
+        <> " pan: "
+        <> format_pan_label(clamped)
+        <> " ("
+        <> converter.format_float(clamped, 2)
+        <> ")"
+      #(
+        Model(
+          ..model,
+          voice_pan: next_pans,
+          stereo_mode: StereoCustom(next_pans.0, next_pans.1, next_pans.2),
+          status_text: status,
+        ),
+        send_command_effect(cmd),
       )
     }
 
@@ -567,41 +611,43 @@ fn view_header(model: Model) -> Element(Msg) {
   html.header([class("app-header")], [
     html.div([class("brand")], [
       html.h1([], [text("SID TO SKODE")]),
-      html.span([class("badge-version")], [text("v0.1.0")]),
-      html.span([class("badge-engine")], [text("Skred v0.80.0")]),
-      html.span([class("badge-analog")], [
-        text("⚡ Analog Waves: w15 / w16 / w18"),
-      ]),
-      html.span([class("badge-stereo")], [text("📻 Authentic Mono")]),
+      html.span([class("brand-tagline")], [text("C64 to Skred Synthesizer")]),
     ]),
     html.div([class("header-controls")], [
-      html.div([class("engine-status")], [
-        html.span(
-          [
-            class(case model.engine_ready {
-              True -> "status-dot status-ready"
-              False -> "status-dot status-loading"
-            }),
-          ],
-          [],
-        ),
-        html.span([class("status-label")], [
-          text(case model.engine_ready {
-            True -> "Audio Engine Ready"
-            False -> "Loading WASM..."
+      html.div(
+        [
+          class("engine-status"),
+          attribute.title(case model.engine_ready {
+            True -> "Skred 0.80.0 Audio Engine Ready"
+            False -> "Loading WASM Audio Engine..."
           }),
-        ]),
-      ]),
+        ],
+        [
+          html.span(
+            [
+              class(case model.engine_ready {
+                True -> "status-dot status-ready"
+                False -> "status-dot status-loading"
+              }),
+            ],
+            [],
+          ),
+        ],
+      ),
       html.button(
         [
           class("btn btn-terminal btn-sm"),
           event.on_click(ToggleReplClicked),
-          title("Toggle Skred Interactive REPL (Ctrl+~)"),
+          attribute.title("Toggle Skred Interactive REPL (Ctrl+~)"),
         ],
-        [text(">_ REPL (Ctrl+~)")],
+        [text(">_ REPL")],
       ),
       html.button(
-        [class("btn btn-danger btn-sm"), event.on_click(PanicClicked)],
+        [
+          class("btn btn-danger btn-sm"),
+          event.on_click(PanicClicked),
+          attribute.title("Emergency Audio Panic / Silence All"),
+        ],
         [text("PANIC")],
       ),
     ]),
@@ -1122,45 +1168,97 @@ fn view_volume_slider(model: Model) -> Element(Msg) {
   ])
 }
 
+fn format_pan_label(pan: Float) -> String {
+  let rounded = float.round(pan *. 100.0)
+  case rounded {
+    0 -> "Center"
+    r if r < 0 -> int.to_string(-r) <> "% Left"
+    r -> int.to_string(r) <> "% Right"
+  }
+}
+
 fn view_stereo_selector(model: Model) -> Element(Msg) {
+  let #(p0, p1, p2) = model.voice_pan
   html.div([class("stereo-control-group")], [
-    html.span([class("stereo-label")], [text("STEREO")]),
-    html.div([class("segmented-control")], [
-      html.button(
-        [
-          class(case model.stereo_mode {
-            StereoHeadphone -> "segment-btn active"
-            _ -> "segment-btn"
-          }),
-          event.on_click(StereoModeChanged(StereoHeadphone)),
-          attribute.title(
-            "Headphone separation (75%) - Prevents ear fatigue on headphones/earbuds",
-          ),
-        ],
-        [text("🎧 75%")],
+    html.div([class("stereo-presets-row")], [
+      html.span([class("stereo-label")], [text("PANNING")]),
+      html.div([class("segmented-control")], [
+        html.button(
+          [
+            class(case model.stereo_mode {
+              StereoMono -> "segment-btn active"
+              _ -> "segment-btn"
+            }),
+            event.on_click(StereoModeChanged(StereoMono)),
+            attribute.title("Authentic Mono (0.0 / 0.0 / 0.0)"),
+          ],
+          [text("📻 Mono")],
+        ),
+        html.button(
+          [
+            class(case model.stereo_mode {
+              StereoHeadphone -> "segment-btn active"
+              _ -> "segment-btn"
+            }),
+            event.on_click(StereoModeChanged(StereoHeadphone)),
+            attribute.title("Headphone separation (-0.60 / +0.60 / Center)"),
+          ],
+          [text("🎧 75%")],
+        ),
+        html.button(
+          [
+            class(case model.stereo_mode {
+              StereoWide -> "segment-btn active"
+              _ -> "segment-btn"
+            }),
+            event.on_click(StereoModeChanged(StereoWide)),
+            attribute.title("Wide separation (-1.00 / +1.00 / Center)"),
+          ],
+          [text("🔊 Wide")],
+        ),
+      ]),
+    ]),
+    html.div([class("voice-pan-sliders")], [
+      view_voice_pan_slider(0, "V1", p0),
+      view_voice_pan_slider(1, "V2", p1),
+      view_voice_pan_slider(2, "V3", p2),
+    ]),
+  ])
+}
+
+fn view_voice_pan_slider(
+  voice_idx: Int,
+  label: String,
+  pan: Float,
+) -> Element(Msg) {
+  html.div([class("pan-slider-item")], [
+    html.span([class("pan-slider-label")], [text(label)]),
+    html.input([
+      type_("range"),
+      attribute.min("-1.0"),
+      attribute.max("1.0"),
+      attribute.step("0.05"),
+      attribute.value(converter.format_float(pan, 2)),
+      class("pan-range-input"),
+      attribute.title(
+        label
+        <> ": "
+        <> format_pan_label(pan)
+        <> " (v"
+        <> int.to_string(voice_idx)
+        <> " p"
+        <> converter.format_float(pan, 2)
+        <> ")",
       ),
-      html.button(
-        [
-          class(case model.stereo_mode {
-            StereoWide -> "segment-btn active"
-            _ -> "segment-btn"
-          }),
-          event.on_click(StereoModeChanged(StereoWide)),
-          attribute.title("Wide separation (100% L-R-C)"),
-        ],
-        [text("🔊 Wide 100%")],
-      ),
-      html.button(
-        [
-          class(case model.stereo_mode {
-            StereoMono -> "segment-btn active"
-            _ -> "segment-btn"
-          }),
-          event.on_click(StereoModeChanged(StereoMono)),
-          attribute.title("Mono (0%) - Centers all 3 voices"),
-        ],
-        [text("📻 Mono")],
-      ),
+      event.on_input(fn(val) {
+        case float.parse(val) {
+          Ok(f) -> VoicePanChanged(voice_idx, f)
+          Error(_) -> VoicePanChanged(voice_idx, 0.0)
+        }
+      }),
+    ]),
+    html.span([class("pan-slider-val mono")], [
+      text(converter.format_float(pan, 2)),
     ]),
   ])
 }
@@ -1438,12 +1536,13 @@ fn view_tab_voices(model: Model, song: DumpSong) -> Element(Msg) {
       )
   }
 
+  let #(p0, p1, p2) = model.voice_pan
   html.div([class("voices-tab-layout")], [
     view_register_strip(step_idx, song.frame_count, frame),
     html.div([class("voices-grid")], [
-      view_voice_channel_card(0, "Voice 1", "$D400-$D406", frame.v1),
-      view_voice_channel_card(1, "Voice 2", "$D407-$D40D", frame.v2),
-      view_voice_channel_card(2, "Voice 3", "$D40E-$D414", frame.v3),
+      view_voice_channel_card(0, "Voice 1", "$D400-$D406", frame.v1, p0),
+      view_voice_channel_card(1, "Voice 2", "$D407-$D40D", frame.v2, p1),
+      view_voice_channel_card(2, "Voice 3", "$D40E-$D414", frame.v3, p2),
     ]),
     view_filter_card(frame.filter),
   ])
@@ -1586,6 +1685,7 @@ fn view_voice_channel_card(
   label: String,
   addr_range: String,
   vf: VoiceFrame,
+  pan: Float,
 ) -> Element(Msg) {
   let hz = converter.freq_to_hz(vf.freq)
   let hz_str = converter.format_float(hz, 1) <> " Hz"
@@ -1619,6 +1719,59 @@ fn view_voice_channel_card(
           }),
         ],
       ),
+    ]),
+    html.div([class("voice-pan-card-row")], [
+      html.div([class("voice-pan-card-header")], [
+        html.span([class("voice-pan-card-label")], [
+          text("Stereo Pan (v" <> int.to_string(c) <> " p)"),
+        ]),
+        html.span([class("voice-pan-card-val mono")], [
+          text(
+            format_pan_label(pan)
+            <> " ("
+            <> converter.format_float(pan, 2)
+            <> ")",
+          ),
+        ]),
+      ]),
+      html.div([class("voice-pan-slider-container")], [
+        html.span([class("pan-card-end-label mono")], [text("L")]),
+        html.input([
+          type_("range"),
+          attribute.min("-1.0"),
+          attribute.max("1.0"),
+          attribute.step("0.05"),
+          attribute.value(converter.format_float(pan, 2)),
+          class("pan-card-slider"),
+          attribute.title(
+            label
+            <> " Pan: "
+            <> format_pan_label(pan)
+            <> " (v"
+            <> int.to_string(c)
+            <> " p"
+            <> converter.format_float(pan, 2)
+            <> ")",
+          ),
+          event.on_input(fn(val) {
+            case float.parse(val) {
+              Ok(f) -> VoicePanChanged(c, f)
+              Error(_) -> VoicePanChanged(c, 0.0)
+            }
+          }),
+        ]),
+        html.span([class("pan-card-end-label mono")], [text("R")]),
+        html.button(
+          [
+            class("btn-pan-center mono"),
+            event.on_click(VoicePanChanged(c, 0.0)),
+            attribute.title(
+              "Center Voice " <> int.to_string(c + 1) <> " (0.00)",
+            ),
+          ],
+          [text("C")],
+        ),
+      ]),
     ]),
     html.div([class("voice-specs-grid")], [
       spec_item_with_delta(

@@ -74,6 +74,15 @@ html, body {
   font-family: var(--font-mono);
 }
 
+.brand-tagline {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
 .badge-version {
   font-size: 0.72rem;
   background-color: var(--bg-subtle);
@@ -525,11 +534,155 @@ html, body {
   text-align: right;
 }
 
-/* Stereo Separation Control */
+/* Stereo Separation & Voice Panning Controls */
 .stereo-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stereo-presets-row {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.voice-pan-sliders {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.pan-slider-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pan-slider-label {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+
+.pan-range-input {
+  width: 54px;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.pan-range-input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.pan-range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+.pan-slider-val {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Voice Card Pan Control */
+.voice-pan-card-row {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-pan-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.voice-pan-card-label {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.voice-pan-card-val {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.voice-pan-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pan-card-end-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.pan-card-slider {
+  flex: 1;
+  height: 5px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.pan-card-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+}
+
+.btn-pan-center {
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-pan-center:hover {
+  color: var(--text-main);
+  background-color: var(--border);
+  border-color: var(--accent-cyan);
 }
 
 .stereo-label {
@@ -1265,9 +1418,20 @@ html, body {
 
   .stereo-control-group {
     width: 100%;
-    justify-content: space-between;
+    gap: 8px;
     padding-top: 0;
     border-top: none;
+  }
+
+  .stereo-presets-row {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .voice-pan-sliders {
+    width: 100%;
+    justify-content: space-between;
+    overflow-x: auto;
   }
 
   .segmented-control {

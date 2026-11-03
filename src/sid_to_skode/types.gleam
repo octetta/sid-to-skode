@@ -7,6 +7,7 @@ pub type StereoMode {
   StereoHeadphone
   StereoWide
   StereoMono
+  StereoCustom(Float, Float, Float)
 }
 
 pub type SidWaveform {
@@ -117,6 +118,7 @@ pub type Model {
     active_tab: String,
     catalog_info: Option(SidCatalogInfo),
     stereo_mode: StereoMode,
+    voice_pan: #(Float, Float, Float),
     master_volume: Int,
     raw_dump_text: String,
     source_description: String,
@@ -146,6 +148,7 @@ pub type Msg {
   LoadDemo(url: String, filename: String, title: String, author: String)
   RandomSidClicked
   StereoModeChanged(StereoMode)
+  VoicePanChanged(voice: Int, pan: Float)
   MasterVolumeChanged(Int)
   CopySkodeClicked
   ConversionFailed(String)

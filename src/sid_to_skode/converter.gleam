@@ -7,8 +7,8 @@ import gleam/list
 import gleam/string
 import sid_to_skode/types.{
   type ConversionResult, type DumpSong, type FilterFrame, type SidFrame,
-  type StereoMode, type VoiceFrame, ConversionResult, StereoHeadphone,
-  StereoMono, StereoWide,
+  type StereoMode, type VoiceFrame, ConversionResult, StereoCustom,
+  StereoHeadphone, StereoMono, StereoWide,
 }
 
 pub fn make_range(start: Int, end: Int) -> List(Int) {
@@ -76,20 +76,26 @@ pub fn res_to_q(res: Int) -> Float {
 }
 
 pub fn format_float(val: Float, decimals: Int) -> String {
+  let is_negative = val <. 0.0
+  let abs_val = float.absolute_value(val)
   let factor = case decimals {
     1 -> 10.0
     2 -> 100.0
     3 -> 1000.0
     _ -> 100.0
   }
-  let rounded = float.round(val *. factor)
+  let rounded = float.round(abs_val *. factor)
   let whole = rounded / float.round(factor)
-  let frac = int.absolute_value(rounded % float.round(factor))
+  let frac = rounded % float.round(factor)
   let frac_str = case frac < 10 && decimals > 1 {
     True -> "0" <> int.to_string(frac)
     False -> int.to_string(frac)
   }
-  int.to_string(whole) <> "." <> frac_str
+  let num_str = int.to_string(whole) <> "." <> frac_str
+  case is_negative && rounded > 0 {
+    True -> "-" <> num_str
+    False -> num_str
+  }
 }
 
 pub type VoiceTracker {
@@ -434,6 +440,11 @@ pub fn convert_song(
         StereoHeadphone -> #("-0.6", "0.6", "0.0")
         StereoWide -> #("-1.0", "1.0", "0.0")
         StereoMono -> #("0.0", "0.0", "0.0")
+        StereoCustom(v0, v1, v2) -> #(
+          format_float(v0, 2),
+          format_float(v1, 2),
+          format_float(v2, 2),
+        )
       }
 
       // Initial header
@@ -663,5 +674,16 @@ pub fn build_live_stereo_command(stereo: StereoMode) -> String {
     StereoHeadphone -> "v0 p-0.6; v1 p0.6; v2 p0.0"
     StereoWide -> "v0 p-1.0; v1 p1.0; v2 p0.0"
     StereoMono -> "v0 p0.0; v1 p0.0; v2 p0.0"
+    StereoCustom(p0, p1, p2) ->
+      "v0 p"
+      <> format_float(p0, 2)
+      <> "; v1 p"
+      <> format_float(p1, 2)
+      <> "; v2 p"
+      <> format_float(p2, 2)
   }
+}
+
+pub fn build_voice_pan_command(voice: Int, pan: Float) -> String {
+  "v" <> int.to_string(voice) <> " p" <> format_float(pan, 2)
 }

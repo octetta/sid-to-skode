@@ -205,3 +205,38 @@ pub fn no_vt_in_pattern_steps_test() {
   // ADSR change while gate is active must trigger 'l1'
   string.contains(res.skode_text, "l1") |> should.be_true
 }
+
+pub fn voice_panning_test() {
+  let sample_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | AF58  E-7 D8  15 0DFB 180 | 0000  C-0 80  43 0FC4 200 | 03A9  A-1 95  41 099F 180 | 0000 00 Off F |
+"
+  let assert Ok(song) = dump_parser.parse_dump(sample_dump, "Pan Tune")
+
+  // Test custom floating-point stereo pan (e.g. v0 p-1.0, v1 p1.0, v2 p0.25)
+  let assert Ok(res) =
+    converter.convert_song(song, types.StereoCustom(-1.0, 1.0, 0.25))
+  string.contains(
+    res.skode_text,
+    "v0 [Voice 1] vt w16 a-8 t0.002,0.008,0.5,0.01 p-1.00",
+  )
+  |> should.be_true
+  string.contains(
+    res.skode_text,
+    "v1 [Voice 2] vt w15 a-8 t0.002,0.008,0.5,0.01 p1.00",
+  )
+  |> should.be_true
+  string.contains(
+    res.skode_text,
+    "v2 [Voice 3] vt w18 a-8 t0.002,0.008,0.5,0.01 p0.25",
+  )
+  |> should.be_true
+
+  // Test live commands
+  converter.build_voice_pan_command(0, -1.0) |> should.equal("v0 p-1.00")
+  converter.build_voice_pan_command(1, 0.75) |> should.equal("v1 p0.75")
+  converter.build_voice_pan_command(2, 0.0) |> should.equal("v2 p0.00")
+  converter.build_live_stereo_command(types.StereoCustom(-0.5, 0.5, 0.0))
+  |> should.equal("v0 p-0.50; v1 p0.50; v2 p0.00")
+}
