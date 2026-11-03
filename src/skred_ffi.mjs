@@ -1,5 +1,6 @@
 // JavaScript FFI Bridge for sid-to-skode
 // Integrates Skred 0.80.0 WASM engine, in-browser siddump WASM, and Web Audio APIs
+import { createReplDom, toggleRepl, appendReplOutput } from "./repl.mjs";
 
 const win = typeof window !== "undefined" ? window : globalThis;
 
@@ -120,24 +121,28 @@ export function executeSkredCommand(cmd) {
   const M = getWasmModule();
   if (!M) {
     commandQueue.push(cmd);
-    return;
+    return 0;
   }
 
   if (typeof M.ccall === "function") {
     try {
-      M.ccall("skred_command", "number", ["string"], [cmd]);
+      return M.ccall("skred_command", "number", ["string"], [cmd]);
     } catch (err) {
       console.warn("[sid-to-skode] Error executing skred command:", err);
+      return -1;
     }
   } else if (typeof M._skred_command === "function" && typeof M.allocateUTF8 === "function") {
     try {
       const ptr = M.allocateUTF8(cmd);
-      M._skred_command(ptr);
+      const res = M._skred_command(ptr);
       if (typeof M._free === "function") M._free(ptr);
+      return res;
     } catch (err) {
       console.warn("[sid-to-skode] Error executing skred command ptr:", err);
+      return -1;
     }
   }
+  return 0;
 }
 
 export function sendCommand(cmd) {
@@ -268,6 +273,22 @@ export function initEngine(callback) {
       return new URL("vendor/skred/" + path, window.location.href).href;
     }
     return "/vendor/skred/" + path;
+  };
+
+  createReplDom();
+
+  const prevPrint = win.Module.print;
+  win.Module.print = function (text) {
+    if (prevPrint) prevPrint(text);
+    appendReplOutput("out", text);
+    console.log("[skred]", text);
+  };
+
+  const prevPrintErr = win.Module.printErr;
+  win.Module.printErr = function (text) {
+    if (prevPrintErr) prevPrintErr(text);
+    appendReplOutput("err", text);
+    console.warn("[skred]", text);
   };
 
   let initializedDone = false;
@@ -403,11 +424,11 @@ export function registerFileDrop(callback) {
       if (name.toLowerCase().endsWith(".sid")) {
         const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name, 210);
         if (dumpText && callback) {
-          callback(name, dumpText, "📁 Local File Drop: " + name);
+          callback(name, dumpText, "📁 Local File Drop: " + name, "");
         }
       } else {
         const text = new TextDecoder().decode(buffer);
-        if (callback) callback(name, text, "📁 Local Dump File: " + name);
+        if (callback) callback(name, text, "📁 Local Dump File: " + name, "");
       }
     } catch (err) {
       console.error("[sid-to-skode] Error reading file:", err);
@@ -931,6 +952,7 @@ export async function loadDemoSid(
   try {
     let fetchUrl = url;
     let sourceDesc = "🌐 HVSC Online Archive: " + url;
+    let resolvedHvscPath = "";
 
     if (
       url.startsWith("MUSICIANS/") ||
@@ -940,6 +962,7 @@ export async function loadDemoSid(
       // Relative HVSC path -> fetch via Vite proxy /hvsc/...
       fetchUrl = "/hvsc/" + url;
       sourceDesc = "🌐 HVSC Online: /" + url;
+      resolvedHvscPath = url;
     } else if (url.startsWith("demos/")) {
       // Check if it's one of our catalog items to get real HVSC path and duration
       const match = HVSC_CATALOG.find(
@@ -948,6 +971,7 @@ export async function loadDemoSid(
       if (match) {
         fetchUrl = "/hvsc/" + match.hvscPath;
         sourceDesc = "🌐 HVSC Online: /" + match.hvscPath;
+        resolvedHvscPath = match.hvscPath;
         if (!targetDuration) targetDuration = match.duration;
       } else {
         fetchUrl = url;
@@ -972,6 +996,7 @@ export async function loadDemoSid(
         if (!res2.ok) throw new Error("Direct HTTP " + res2.status);
         buf = await res2.arrayBuffer();
         sourceDesc = "🌐 Direct HVSC Mirror: /" + cleanPath;
+        resolvedHvscPath = cleanPath;
       } catch (directErr) {
         // Fallback 2: bundled demo in demos/ if present
         const demoUrl = "demos/" + filename;
@@ -993,13 +1018,22 @@ export async function loadDemoSid(
     }
 
     if (onSuccess) {
-      onSuccess(filename, dumpText, title || filename, author || "Unknown", sourceDesc);
+      onSuccess(
+        filename,
+        dumpText,
+        title || filename,
+        author || "Unknown",
+        sourceDesc,
+        resolvedHvscPath,
+      );
     }
   } catch (err) {
     console.error("[sid-to-skode] Error loading demo SID:", err);
     if (onError) onError(err.message || "Failed to load demo");
   }
 }
+
+export { toggleRepl } from "./repl.mjs";
 
 // ---------------------------------------------------------------------------
 // 5. Utility Helpers (Download & Clipboard)

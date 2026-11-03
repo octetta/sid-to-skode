@@ -10,7 +10,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import lustre
-import lustre/attribute.{class, href, id, rel, target, type_}
+import lustre/attribute.{class, href, id, rel, target, title, type_}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element, text}
 import lustre/element/html
@@ -24,7 +24,7 @@ import sid_to_skode/types.{
   Model, PanicClicked, PauseClicked, PlayClicked, PlaybackEnded,
   PlaybackStepChanged, RandomSidClicked, ResetClicked, ResumeClicked, SidFrame,
   StereoHeadphone, StereoModeChanged, StereoMono, StereoWide, StopClicked,
-  TabSelected, VoiceFrame,
+  TabSelected, ToggleReplClicked, VoiceFrame,
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,9 @@ import sid_to_skode/types.{
 fn js_init_engine(callback: fn(Bool) -> Nil) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "registerFileDrop")
-fn js_register_file_drop(callback: fn(String, String, String) -> Nil) -> Nil
+fn js_register_file_drop(
+  callback: fn(String, String, String, String) -> Nil,
+) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "playSkode")
 fn js_play_skode(script: String, steps: Int) -> Nil
@@ -58,6 +60,9 @@ fn js_set_master_volume(db: Int) -> Nil
 @external(javascript, "./skred_ffi.mjs", "sendCommand")
 fn js_send_command(cmd: String) -> Nil
 
+@external(javascript, "./skred_ffi.mjs", "toggleRepl")
+fn js_toggle_repl() -> Nil
+
 @external(javascript, "./skred_ffi.mjs", "registerPlaybackListener")
 fn js_register_playback_listener(
   on_step: fn(Int, Int) -> Nil,
@@ -70,13 +75,13 @@ fn js_load_demo_sid(
   filename: String,
   title: String,
   author: String,
-  on_success: fn(String, String, String, String, String) -> Nil,
+  on_success: fn(String, String, String, String, String, String) -> Nil,
   on_error: fn(String) -> Nil,
 ) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "fetchRandomSid")
 fn js_fetch_random_sid(
-  on_success: fn(String, String, String, String, String) -> Nil,
+  on_success: fn(String, String, String, String, String, String) -> Nil,
   on_error: fn(String) -> Nil,
 ) -> Nil
 
@@ -98,8 +103,8 @@ fn init_engine_effect() -> Effect(Msg) {
 
 fn register_file_drop_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
-    js_register_file_drop(fn(filename, content, source_desc) {
-      dispatch(DumpTextReady(filename, content, source_desc))
+    js_register_file_drop(fn(filename, content, source_desc, hvsc_path) {
+      dispatch(DumpTextReady(filename, content, source_desc, hvsc_path))
     })
   })
 }
@@ -137,6 +142,10 @@ fn send_command_effect(cmd: String) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_send_command(cmd) })
 }
 
+fn toggle_repl_effect() -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_toggle_repl() })
+}
+
 fn set_master_volume_effect(db: Int) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_set_master_volume(db) })
 }
@@ -161,8 +170,8 @@ fn load_demo_effect(
       filename,
       title,
       author,
-      fn(name, content, _t, _a, src) {
-        dispatch(DumpTextReady(name, content, src))
+      fn(name, content, _t, _a, src, path) {
+        dispatch(DumpTextReady(name, content, src, path))
       },
       fn(err) { dispatch(ConversionFailed(err)) },
     )
@@ -172,8 +181,8 @@ fn load_demo_effect(
 fn random_sid_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
     js_fetch_random_sid(
-      fn(name, content, _t, _a, src) {
-        dispatch(DumpTextReady(name, content, src))
+      fn(name, content, _t, _a, src, path) {
+        dispatch(DumpTextReady(name, content, src, path))
       },
       fn(err) { dispatch(ConversionFailed(err)) },
     )
@@ -208,6 +217,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       master_volume: -8,
       raw_dump_text: "",
       source_description: "",
+      hvsc_path: None,
     )
 
   let effects =
@@ -246,10 +256,14 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       )
     }
 
-    DumpTextReady(filename, content, source_desc) -> {
+    DumpTextReady(filename, content, source_desc, hvsc_path_str) -> {
       let stop_eff = case model.is_playing {
         True -> stop_effect()
         False -> effect.none()
+      }
+      let opt_hvsc = case string.trim(hvsc_path_str) {
+        "" -> None
+        p -> Some(p)
       }
       case dump_parser.parse_dump(content, filename) {
         Error(err) -> {
@@ -290,6 +304,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
                   conversion: Some(conv),
                   raw_dump_text: content,
                   source_description: source_desc,
+                  hvsc_path: opt_hvsc,
                   is_playing: False,
                   is_paused: False,
                   current_step: 0,
@@ -440,9 +455,14 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           status_text: "Ready. Drag and drop any Commodore 64 .SID file or siddump output.",
           raw_dump_text: "",
           source_description: "",
+          hvsc_path: None,
         ),
         stop_effect(),
       )
+    }
+
+    ToggleReplClicked -> {
+      #(model, toggle_repl_effect())
     }
 
     TabSelected(tab) -> {
@@ -586,6 +606,14 @@ fn view_header(model: Model) -> Element(Msg) {
           }),
         ]),
       ]),
+      html.button(
+        [
+          class("btn btn-terminal btn-sm"),
+          event.on_click(ToggleReplClicked),
+          title("Toggle Skred Interactive REPL (Ctrl+~)"),
+        ],
+        [text(">_ REPL (Ctrl+~)")],
+      ),
       html.button(
         [class("btn btn-danger btn-sm"), event.on_click(PanicClicked)],
         [text("PANIC")],
@@ -1169,7 +1197,36 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     s -> s
   }
 
-  html.div([class("metadata-bar")], [
+  let hvsc_items = case model.hvsc_path {
+    Some(path) -> [
+      html.div([class("meta-item meta-item-hvsc")], [
+        html.span([class("meta-label")], [text("PUBLIC ARCHIVE")]),
+        html.a(
+          [
+            class("meta-link-hvsc"),
+            href("https://deepsid.chordian.net/?file=/" <> path),
+            target("_blank"),
+            rel("noopener noreferrer"),
+            title("Open tune on DeepSID chordian player"),
+          ],
+          [text("🌐 DeepSID ↗")],
+        ),
+        html.a(
+          [
+            class("meta-link-direct"),
+            href("https://hvsc.brona.dk/HVSC/C64Music/" <> path),
+            target("_blank"),
+            rel("noopener noreferrer"),
+            title("Download original .SID file from HVSC"),
+          ],
+          [text("📥 .SID ↗")],
+        ),
+      ]),
+    ]
+    None -> []
+  }
+
+  let base_items = [
     html.div([class("meta-item meta-title-item")], [
       html.span([class("meta-label")], [text("TITLE")]),
       html.span([class("meta-val highlight-title")], [text(clean_title)]),
@@ -1202,7 +1259,9 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
       html.span([class("meta-label")], [text("ARCHIVE SOURCE")]),
       html.span([class("meta-val highlight-source")], [text(source_display)]),
     ]),
-  ])
+  ]
+
+  html.div([class("metadata-bar")], list.append(base_items, hvsc_items))
 }
 
 fn view_tabs_navigation(model: Model) -> Element(Msg) {
@@ -1268,7 +1327,48 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
     s -> s
   }
 
-  html.div([class("info-tab-layout")], [
+  let archive_card = case model.hvsc_path {
+    Some(path) -> [
+      html.div([class("song-info-card")], [
+        html.h3([class("card-title")], [
+          text("🌐 Public Web Source & DeepSID Player"),
+        ]),
+        html.div([class("info-grid")], [
+          html.div([class("info-row")], [
+            html.span([class("info-key")], [text("HVSC Relative Path")]),
+            html.span([class("info-val mono")], [text(path)]),
+          ]),
+          html.div([class("info-row")], [
+            html.span([class("info-key")], [text("DeepSID Online Player")]),
+            html.a(
+              [
+                class("meta-link-hvsc"),
+                href("https://deepsid.chordian.net/?file=/" <> path),
+                target("_blank"),
+                rel("noopener noreferrer"),
+              ],
+              [text("https://deepsid.chordian.net/?file=/" <> path <> " ↗")],
+            ),
+          ]),
+          html.div([class("info-row")], [
+            html.span([class("info-key")], [text("Original .SID Download")]),
+            html.a(
+              [
+                class("meta-link-direct"),
+                href("https://hvsc.brona.dk/HVSC/C64Music/" <> path),
+                target("_blank"),
+                rel("noopener noreferrer"),
+              ],
+              [text("Download " <> path <> " (HVSC Mirror) ↗")],
+            ),
+          ]),
+        ]),
+      ]),
+    ]
+    None -> []
+  }
+
+  let base_cards = [
     html.div([class("song-info-card")], [
       html.h3([class("card-title")], [text("Commodore 64 Sound Details")]),
       html.div([class("info-grid")], [
@@ -1304,7 +1404,9 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
         ),
       ]),
     ]),
-  ])
+  ]
+
+  html.div([class("info-tab-layout")], list.append(archive_card, base_cards))
 }
 
 fn info_row(label: String, val: String) -> Element(Msg) {

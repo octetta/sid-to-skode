@@ -119,13 +119,19 @@ pub type Model {
     master_volume: Int,
     raw_dump_text: String,
     source_description: String,
+    hvsc_path: Option(String),
   )
 }
 
 pub type Msg {
   EngineStatusChanged(Bool)
   FileDropped(name: String, data: BitArray)
-  DumpTextReady(name: String, dump_text: String, source_desc: String)
+  DumpTextReady(
+    name: String,
+    dump_text: String,
+    source_desc: String,
+    hvsc_path: String,
+  )
   PlayClicked
   PauseClicked
   ResumeClicked
@@ -142,4 +148,5 @@ pub type Msg {
   MasterVolumeChanged(Int)
   CopySkodeClicked
   ConversionFailed(String)
+  ToggleReplClicked
 }
