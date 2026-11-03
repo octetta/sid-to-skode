@@ -33,13 +33,24 @@ pub fn format_duration(seconds: Float) -> String {
   mins_str <> ":" <> secs_str
 }
 
+// Hardware SID ADSR time constants calibrated with software DSP anti-click floors:
+// On physical SID hardware (MOS 6581/8580), Attack 0 is 2.0ms and Release 0 is 6.0ms.
+// Neither parameter was ever 0.0ms on real hardware. In software DSP (Skred),
+// an instantaneous 0.0s jump creates a step discontinuity that produces audible clicks.
+// An attack floor of 4ms and a release floor of 12ms eliminate clicks while keeping
+// the punchy, snappy percussive feel identical to authentic C64 hardware.
 const sid_attack_table: List(Float) = [
-  0.002, 0.008, 0.016, 0.024, 0.038, 0.056, 0.068, 0.08, 0.1, 0.25, 0.5, 0.8,
+  0.004, 0.008, 0.016, 0.024, 0.038, 0.056, 0.068, 0.08, 0.1, 0.25, 0.5, 0.8,
   1.0, 3.0, 5.0, 8.0,
 ]
 
 const sid_decay_table: List(Float) = [
-  0.006, 0.024, 0.048, 0.072, 0.114, 0.168, 0.204, 0.24, 0.3, 0.75, 1.5, 2.4,
+  0.008, 0.024, 0.048, 0.072, 0.114, 0.168, 0.204, 0.24, 0.3, 0.75, 1.5, 2.4,
+  3.0, 9.0, 15.0, 24.0,
+]
+
+const sid_release_table: List(Float) = [
+  0.012, 0.024, 0.048, 0.072, 0.114, 0.168, 0.204, 0.24, 0.3, 0.75, 1.5, 2.4,
   3.0, 9.0, 15.0, 24.0,
 ]
 
@@ -87,9 +98,11 @@ pub fn format_float(val: Float, decimals: Int) -> String {
   let rounded = float.round(abs_val *. factor)
   let whole = rounded / float.round(factor)
   let frac = rounded % float.round(factor)
-  let frac_str = case frac < 10 && decimals > 1 {
-    True -> "0" <> int.to_string(frac)
-    False -> int.to_string(frac)
+  let raw_frac = int.to_string(frac)
+  let pad_needed = decimals - string.length(raw_frac)
+  let frac_str = case pad_needed > 0 {
+    True -> string.repeat("0", pad_needed) <> raw_frac
+    False -> raw_frac
   }
   let num_str = int.to_string(whole) <> "." <> frac_str
   case is_negative && rounded > 0 {
@@ -192,10 +205,10 @@ fn generate_voice_step_tokens(
   let adsr_changed = vf.adsr != tracker.last_adsr
   let #(tokens, next_adsr) = case adsr_changed {
     True -> {
-      let a_sec = lookup_table(sid_attack_table, vf.attack, 0.002)
-      let d_sec = lookup_table(sid_decay_table, vf.decay, 0.006)
+      let a_sec = lookup_table(sid_attack_table, vf.attack, 0.004)
+      let d_sec = lookup_table(sid_decay_table, vf.decay, 0.008)
       let s_lvl = int.to_float(vf.sustain) /. 15.0
-      let r_sec = lookup_table(sid_decay_table, vf.release, 0.006)
+      let r_sec = lookup_table(sid_release_table, vf.release, 0.012)
       let adsr_str =
         "t"
         <> format_float(a_sec, 3)
@@ -462,9 +475,9 @@ pub fn convert_song(
         "",
         "# === INITIALIZATION ===",
         "S0 S1 S2 S3",
-        "v0 [Voice 1] vt w16 a-8 t0.002,0.008,0.5,0.01 p" <> p0,
-        "v1 [Voice 2] vt w15 a-8 t0.002,0.008,0.5,0.01 p" <> p1,
-        "v2 [Voice 3] vt w18 a-8 t0.002,0.008,0.5,0.01 p" <> p2,
+        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0,
+        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1,
+        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2,
         "v3 [Filter] vt w0 a0",
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",

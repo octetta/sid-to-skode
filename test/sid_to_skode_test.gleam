@@ -219,19 +219,26 @@ pub fn voice_panning_test() {
     converter.convert_song(song, types.StereoCustom(-1.0, 1.0, 0.25))
   string.contains(
     res.skode_text,
-    "v0 [Voice 1] vt w16 a-8 t0.002,0.008,0.5,0.01 p-1.00",
+    "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p-1.00",
   )
   |> should.be_true
   string.contains(
     res.skode_text,
-    "v1 [Voice 2] vt w15 a-8 t0.002,0.008,0.5,0.01 p1.00",
+    "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p1.00",
   )
   |> should.be_true
   string.contains(
     res.skode_text,
-    "v2 [Voice 3] vt w18 a-8 t0.002,0.008,0.5,0.01 p0.25",
+    "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p0.25",
   )
   |> should.be_true
+
+  // Test anti-click float formatting and leading zero padding
+  converter.format_float(0.004, 3) |> should.equal("0.004")
+  converter.format_float(0.012, 3) |> should.equal("0.012")
+  converter.format_float(0.5, 2) |> should.equal("0.50")
+  converter.format_float(-0.6, 2) |> should.equal("-0.60")
+  converter.format_float(0.0, 2) |> should.equal("0.00")
 
   // Test live commands
   converter.build_voice_pan_command(0, -1.0) |> should.equal("v0 p-1.00")

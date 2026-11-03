@@ -127,6 +127,21 @@ export function executeSkredCommand(rawCmd) {
       cmd = "/cer 0 Z0 O DQ ?ce!; S-1; Y-1";
     } else if (trimmed === "play") {
       cmd = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1";
+    } else if (/^t\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i.test(cmd.trim())) {
+      // De-click protection for ADSR 't' command
+      // On real SID hardware (MOS 6581/8580), Attack 0 is 2.0ms and Release 0 is 6.0ms.
+      // In digital DSP, 0.0s causes discontinuous jumps / speaker clicks.
+      // Guarantee minimum anti-click floor (attack >= 4ms, release >= 12ms).
+      cmd = cmd.trim().replace(
+        /^t\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i,
+        (_match, a, d, s, r) => {
+          const aClamped = Math.max(0.004, parseFloat(a) || 0.004);
+          const dVal = parseFloat(d) || 0.008;
+          const sVal = parseFloat(s) || 0.0;
+          const rClamped = Math.max(0.012, parseFloat(r) || 0.012);
+          return `t${aClamped},${dVal},${sVal},${rClamped}`;
+        }
+      );
     }
   }
 
