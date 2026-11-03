@@ -228,8 +228,8 @@ function startWasmEventPump(M) {
               }
             }
 
-            // Song Completion: event 4 (USER id 127) or event 6 (PATTERN_END on pattern 0)
-            if (isPlaybackActive && ((t === 4 && id === 127) || (t === 6 && p === 0))) {
+            // Song Completion: explicit end-of-song marker event 4 (USER id 127)
+            if (isPlaybackActive && t === 4 && id === 127) {
               stopPlayback();
               if (playbackEndedCallback) playbackEndedCallback();
               return;
@@ -471,9 +471,9 @@ export async function runSidDumpWasm(bytes, filename) {
     const virtualFile = "tune.sid";
     instance.FS.writeFile(virtualFile, bytes);
 
-    // Dump up to 45 seconds (2250 frames) of subtune 0 (default song)
+    // Dump up to 90 seconds (4500 frames) of subtune 0 (default song)
     try {
-      instance.callMain([virtualFile, "-t45"]);
+      instance.callMain([virtualFile, "-t90"]);
     } catch (_) {
       // Emscripten exits with ExitStatus upon normal completion
     }
@@ -504,6 +504,41 @@ export const SID_CATALOG = [
     source: "Gremlin Graphics (1985)",
   },
   {
+    title: "Sanxion",
+    author: "Rob Hubbard",
+    filename: "sanxion.sid",
+    url: "demos/sanxion.sid",
+    source: "Thalamus (1986)",
+  },
+  {
+    title: "Delta",
+    author: "Rob Hubbard",
+    filename: "delta.sid",
+    url: "demos/delta.sid",
+    source: "Thalamus (1987)",
+  },
+  {
+    title: "International Karate",
+    author: "Rob Hubbard",
+    filename: "international_karate.sid",
+    url: "demos/international_karate.sid",
+    source: "System 3 (1986)",
+  },
+  {
+    title: "Crazy Comets",
+    author: "Rob Hubbard",
+    filename: "crazy_comets.sid",
+    url: "demos/crazy_comets.sid",
+    source: "Martech (1985)",
+  },
+  {
+    title: "Lightforce",
+    author: "Rob Hubbard",
+    filename: "lightforce.sid",
+    url: "demos/lightforce.sid",
+    source: "Faster Than Light (1986)",
+  },
+  {
     title: "Comic Bakery",
     author: "Martin Galway",
     filename: "comic_bakery.sid",
@@ -516,6 +551,62 @@ export const SID_CATALOG = [
     filename: "arkanoid.sid",
     url: "demos/arkanoid.sid",
     source: "Imagine (1987)",
+  },
+  {
+    title: "Wizball",
+    author: "Martin Galway",
+    filename: "wizball.sid",
+    url: "demos/wizball.sid",
+    source: "Ocean (1987)",
+  },
+  {
+    title: "Rambo: First Blood Part II",
+    author: "Martin Galway",
+    filename: "rambo.sid",
+    url: "demos/rambo.sid",
+    source: "Ocean (1985)",
+  },
+  {
+    title: "Ocean Loader 2",
+    author: "Martin Galway",
+    filename: "ocean_loader_2.sid",
+    url: "demos/ocean_loader_2.sid",
+    source: "Ocean (1985)",
+  },
+  {
+    title: "Green Beret",
+    author: "Martin Galway",
+    filename: "green_beret.sid",
+    url: "demos/green_beret.sid",
+    source: "Imagine (1986)",
+  },
+  {
+    title: "Cybernoid",
+    author: "Jeroen Tel",
+    filename: "cybernoid.sid",
+    url: "demos/cybernoid.sid",
+    source: "Hewson (1988)",
+  },
+  {
+    title: "Cybernoid II",
+    author: "Jeroen Tel",
+    filename: "cybernoid_2.sid",
+    url: "demos/cybernoid_2.sid",
+    source: "Hewson (1988)",
+  },
+  {
+    title: "The Great Giana Sisters",
+    author: "Chris Hülsbeck",
+    filename: "great_giana_sisters.sid",
+    url: "demos/great_giana_sisters.sid",
+    source: "Rainbow Arts (1987)",
+  },
+  {
+    title: "Last Ninja 2",
+    author: "Matt Gray",
+    filename: "last_ninja_2.sid",
+    url: "demos/last_ninja_2.sid",
+    source: "System 3 (1988)",
   },
 ];
 

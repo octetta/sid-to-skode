@@ -107,3 +107,31 @@ pub fn realtime_filter_automation_test() {
   string.contains(res.skode_text, " K") |> should.be_false
   string.contains(res.skode_text, " Q") |> should.be_false
 }
+
+pub fn ring_modulation_and_release_pitch_test() {
+  // Voice 1: Frame 0 has WF 15 (RingMod + Triangle + Gate), Freq AF58 (2636.2 Hz)
+  // Frame 1: WF 80 (Noise, Gate OFF), Freq 0303 (45.28 Hz)
+  // Frame 2: Freq AF58 (2636.2 Hz) while gate is still OFF!
+  // Frame 3: WF 14 (RingMod + Triangle, Gate OFF), Freq 0303
+  let test_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | AF58  E-7 D8  15 0DFB 180 | 0000  C-0 80  43 0FC4 200 | 03A9  A-1 95  41 099F 180 | 0000 00 Off F |
+|     1 | 0303 (F#1 92) 80 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | .... .. ... . |
+|     2 | AF58 (E-7 D8) .. .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 1AC | .... .. ... . |
+|     3 | 0303 (F#1 92) 14 .... ... | ....  ... ..  42 0000 ... | ....  ... ..  .. .... 1C2 | .... .. ... . |
+"
+
+  let assert Ok(song) = dump_parser.parse_dump(test_dump, "Hubbard Tune")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Voice 1 Ring modulation active on frame 0
+  string.contains(res.skode_text, "XM2,1") |> should.be_true
+
+  // Ring modulation disabled on frame 1 (noise)
+  string.contains(res.skode_text, "XM2,0") |> should.be_true
+
+  // Release pitch modulation: pitch changes even though gate is off!
+  string.contains(res.skode_text, "f45.28") |> should.be_true
+  string.contains(res.skode_text, "[f2636.20] x2") |> should.be_true
+}

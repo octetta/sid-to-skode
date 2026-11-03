@@ -581,6 +581,24 @@ fn view_header(model: Model) -> Element(Msg) {
   ])
 }
 
+pub type DemoTune {
+  DemoTune(icon: String, title: String, author: String, filename: String)
+}
+
+const featured_demos: List(DemoTune) = [
+  DemoTune("🎖️", "Commando", "Rob Hubbard", "commando.sid"),
+  DemoTune("🏃", "Monty on the Run", "Rob Hubbard", "monty_on_the_run.sid"),
+  DemoTune("🚀", "Sanxion", "Rob Hubbard", "sanxion.sid"),
+  DemoTune("🔺", "Delta", "Rob Hubbard", "delta.sid"),
+  DemoTune("🥋", "Int. Karate", "Rob Hubbard", "international_karate.sid"),
+  DemoTune("🍰", "Comic Bakery", "Martin Galway", "comic_bakery.sid"),
+  DemoTune("🧱", "Arkanoid", "Martin Galway", "arkanoid.sid"),
+  DemoTune("🔮", "Wizball", "Martin Galway", "wizball.sid"),
+  DemoTune("🤖", "Cybernoid", "Jeroen Tel", "cybernoid.sid"),
+  DemoTune("🍄", "Giana Sisters", "Chris Hülsbeck", "great_giana_sisters.sid"),
+  DemoTune("🥷", "Last Ninja 2", "Matt Gray", "last_ninja_2.sid"),
+]
+
 fn view_drop_zone(model: Model) -> Element(Msg) {
   html.div([class("welcome-container")], [
     html.div([class("drop-box"), id("drop-zone")], [
@@ -590,7 +608,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       ]),
       html.p([class("drop-subtitle")], [
         text(
-          "MOS 6581 / 8580 SID emulation and conversion. Accurately synthesizes analog waveforms (w15 saw, w16 pulse, w18 triangle), CZ phase-distortion PWM (c1,#), ADSR envelopes & biquad filters.",
+          "MOS 6581 / 8580 SID chiptune conversion. Synthesizes real Skred waveforms (w1 pulse, w3 saw, w4 triangle, w5 noise), CZ phase-distortion PWM (c1,#), hardware ADSR envelopes, ring modulation (XM) & realtime biquad filters.",
         ),
       ]),
       html.div([class("file-select-wrapper")], [
@@ -608,68 +626,32 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
         html.span([class("demo-label")], [
           text("Or try an instant demo SID tune:"),
         ]),
-        html.div([class("demo-buttons")], [
-          html.button(
+        html.div(
+          [class("demo-buttons")],
+          list.append(
+            list.map(featured_demos, fn(demo) {
+              let url = "demos/" <> demo.filename
+              html.button(
+                [
+                  class("btn btn-secondary btn-sm"),
+                  event.on_click(LoadDemo(url, demo.filename, demo.title, demo.author)),
+                  attribute.disabled(model.is_converting),
+                ],
+                [text(demo.icon <> " " <> demo.title <> " (" <> demo.author <> ")")],
+              )
+            }),
             [
-              class("btn btn-secondary btn-sm"),
-              event.on_click(LoadDemo(
-                "demos/commando.sid",
-                "commando.sid",
-                "Commando",
-                "Rob Hubbard",
-              )),
-              attribute.disabled(model.is_converting),
+              html.button(
+                [
+                  class("btn btn-modarchive btn-sm"),
+                  event.on_click(RandomSidClicked),
+                  attribute.disabled(model.is_converting),
+                ],
+                [text("🎲 Random SID Tune (17 Classics)")],
+              ),
             ],
-            [text("🎖️ Commando (Rob Hubbard)")],
           ),
-          html.button(
-            [
-              class("btn btn-secondary btn-sm"),
-              event.on_click(LoadDemo(
-                "demos/monty_on_the_run.sid",
-                "monty_on_the_run.sid",
-                "Monty on the Run",
-                "Rob Hubbard",
-              )),
-              attribute.disabled(model.is_converting),
-            ],
-            [text("🏃 Monty on the Run (Rob Hubbard)")],
-          ),
-          html.button(
-            [
-              class("btn btn-secondary btn-sm"),
-              event.on_click(LoadDemo(
-                "demos/comic_bakery.sid",
-                "comic_bakery.sid",
-                "Comic Bakery",
-                "Martin Galway",
-              )),
-              attribute.disabled(model.is_converting),
-            ],
-            [text("🍰 Comic Bakery (Martin Galway)")],
-          ),
-          html.button(
-            [
-              class("btn btn-secondary btn-sm"),
-              event.on_click(LoadDemo(
-                "demos/arkanoid.sid",
-                "arkanoid.sid",
-                "Arkanoid",
-                "Martin Galway",
-              )),
-              attribute.disabled(model.is_converting),
-            ],
-            [text("🧱 Arkanoid (Martin Galway)")],
-          ),
-          html.button(
-            [
-              class("btn btn-modarchive btn-sm"),
-              event.on_click(RandomSidClicked),
-              attribute.disabled(model.is_converting),
-            ],
-            [text("🎲 Random SID Tune")],
-          ),
-        ]),
+        ),
       ]),
     ]),
     html.div([class("public-sources-card")], [

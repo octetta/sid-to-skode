@@ -160,7 +160,7 @@ fn wave_opcode(wave_byte: Int) -> String {
 fn generate_voice_step_tokens(
   vf: VoiceFrame,
   tracker: VoiceTracker,
-  _mod_voice: Int,
+  mod_voice: Int,
 ) -> #(List(String), VoiceTracker) {
   let tokens = []
 
@@ -170,7 +170,7 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_wave)
   }
 
-  // Pulse width changed (for pulse wave w16)
+  // Pulse width changed (for pulse wave w1)
   let is_pulse = int.bitwise_and(vf.waveform_byte, 0x40) != 0
   let #(tokens, next_pulse) = case
     is_pulse && vf.pulse_width != tracker.last_pulse
@@ -203,31 +203,38 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_adsr)
   }
 
+  // Ring modulation changed
+  let #(tokens, next_ring) = case vf.ring_mod != tracker.last_ring {
+    True -> {
+      let xm_str = case vf.ring_mod {
+        True -> "XM" <> int.to_string(mod_voice) <> ",1"
+        False -> "XM" <> int.to_string(mod_voice) <> ",0"
+      }
+      #([xm_str, ..tokens], vf.ring_mod)
+    }
+    False -> #(tokens, tracker.last_ring)
+  }
+
   // Frequency and Gate transitions
   let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
   let gate_turned_on = vf.gate && !tracker.last_gate
   let gate_turned_off = !vf.gate && tracker.last_gate
 
-  let #(tokens, next_freq) = case gate_turned_on {
+  // Emit gate event
+  let tokens = case gate_turned_on, gate_turned_off {
+    True, _ -> ["l1", ..tokens]
+    _, True -> ["l0", ..tokens]
+    False, False -> tokens
+  }
+
+  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
+  // In SID chiptunes, pitch modulation (arpeggios, vibrato, portamento) continues during release.
+  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
     True -> {
       let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
-      #(["l1", f_str, ..tokens], vf.freq)
+      #([f_str, ..tokens], vf.freq)
     }
-    False -> {
-      case gate_turned_off {
-        True -> #(["l0", ..tokens], tracker.last_freq)
-        False -> {
-          // Gate remains ON, frequency slid
-          case vf.gate && freq_changed {
-            True -> {
-              let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
-              #([f_str, ..tokens], vf.freq)
-            }
-            False -> #(tokens, tracker.last_freq)
-          }
-        }
-      }
-    }
+    False -> #(tokens, tracker.last_freq)
   }
 
   let next_tracker =
@@ -237,7 +244,7 @@ fn generate_voice_step_tokens(
       last_adsr: next_adsr,
       last_pulse: next_pulse,
       last_gate: vf.gate,
-      last_ring: tracker.last_ring,
+      last_ring: next_ring,
     )
 
   #(list.reverse(tokens), next_tracker)
