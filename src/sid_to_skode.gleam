@@ -23,9 +23,9 @@ import sid_to_skode/types.{
   DumpTextReady, EngineStatusChanged, FileDropped, FilterFrame, LoadDemo,
   MasterVolumeChanged, Model, PanicClicked, PauseClicked, PlayClicked,
   PlaybackEnded, PlaybackStepChanged, RandomSidClicked, ResetClicked,
-  ResumeClicked, SidFrame, StereoCustom, StereoHeadphone, StereoModeChanged,
-  StereoMono, StereoWide, StopClicked, TabSelected, ToggleReplClicked,
-  VoiceFrame, VoicePanChanged,
+  ResumeClicked, SeekStep, SidFrame, StereoCustom, StereoHeadphone,
+  StereoModeChanged, StereoMono, StereoWide, StopClicked, TabSelected,
+  ToggleDacCrunch, ToggleReplClicked, VoiceFrame, VoicePanChanged,
 }
 
 // ---------------------------------------------------------------------------
@@ -92,9 +92,23 @@ fn js_copy_to_clipboard(content: String) -> Nil
 @external(javascript, "./skred_ffi.mjs", "downloadFile")
 fn js_download_file(filename: String, content: String) -> Nil
 
+@external(javascript, "./skred_ffi.mjs", "seekToStep")
+fn js_seek_to_step(step: Int) -> Nil
+
+@external(javascript, "./skred_ffi.mjs", "setDacCrunch")
+fn js_set_dac_crunch(enabled: Bool) -> Nil
+
 // ---------------------------------------------------------------------------
 // Lustre Effects
 // ---------------------------------------------------------------------------
+
+fn seek_effect(step: Int) -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_seek_to_step(step) })
+}
+
+fn set_dac_crunch_effect(enabled: Bool) -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_set_dac_crunch(enabled) })
+}
 
 fn init_engine_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
@@ -220,6 +234,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       raw_dump_text: "",
       source_description: "",
       hvsc_path: None,
+      dac_crunch: True,
     )
 
   let effects =
@@ -280,7 +295,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           )
         }
         Ok(song) -> {
-          case converter.convert_song(song, model.stereo_mode) {
+          case
+            converter.convert_song_with_options(
+              song,
+              model.stereo_mode,
+              model.dac_crunch,
+            )
+          {
             Error(err) -> {
               #(
                 Model(
@@ -521,11 +542,27 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         StereoMono -> "Stereo pan preset: 📻 Authentic Mono (All centered)"
         StereoCustom(_, _, _) -> "Custom stereo voice panning active"
       }
+      let re_conv = case model.active_song {
+        Some(song) -> {
+          case
+            converter.convert_song_with_options(
+              song,
+              new_mode,
+              model.dac_crunch,
+            )
+          {
+            Ok(conv) -> Some(conv)
+            Error(_) -> model.conversion
+          }
+        }
+        None -> model.conversion
+      }
       #(
         Model(
           ..model,
           stereo_mode: new_mode,
           voice_pan: #(p0, p1, p2),
+          conversion: re_conv,
           status_text: mode_desc,
         ),
         send_command_effect(live_cmd),
@@ -573,6 +610,49 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           status_text: "Master volume: " <> vol_str <> " dB",
         ),
         set_master_volume_effect(vol),
+      )
+    }
+
+    ToggleDacCrunch -> {
+      let next_dac = !model.dac_crunch
+      let status = case next_dac {
+        True -> "🎛️ MOS 6581 DAC Crunch: ON (bc 6 quantized)"
+        False -> "🎛️ MOS 6581 DAC Crunch: OFF (clean 24-bit DSP)"
+      }
+      let re_conv = case model.active_song {
+        Some(song) -> {
+          case
+            converter.convert_song_with_options(
+              song,
+              model.stereo_mode,
+              next_dac,
+            )
+          {
+            Ok(conv) -> Some(conv)
+            Error(_) -> model.conversion
+          }
+        }
+        None -> model.conversion
+      }
+      #(
+        Model(
+          ..model,
+          dac_crunch: next_dac,
+          conversion: re_conv,
+          status_text: status,
+        ),
+        set_dac_crunch_effect(next_dac),
+      )
+    }
+
+    SeekStep(step) -> {
+      let valid_step = case model.conversion {
+        Some(conv) -> int.max(0, int.min(step, conv.total_steps - 1))
+        None -> int.max(0, step)
+      }
+      #(
+        Model(..model, current_step: valid_step),
+        seek_effect(valid_step),
       )
     }
   }
@@ -1108,6 +1188,25 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
             ],
             [],
           ),
+          html.input([
+            type_("range"),
+            attribute.min("0"),
+            attribute.max(int.to_string(int.max(1, total_rows - 1))),
+            attribute.step("1"),
+            attribute.value(int.to_string(cur_step)),
+            attribute.title(
+              "Click or drag to jump anywhere in the SID tune (Frame #"
+              <> int.to_string(cur_step + 1)
+              <> ")",
+            ),
+            class("playback-progress-slider"),
+            event.on_input(fn(val_str) {
+              case int.parse(val_str) {
+                Ok(step) -> SeekStep(step)
+                Error(_) -> SeekStep(0)
+              }
+            }),
+          ]),
         ]),
       ])
     }
@@ -1147,12 +1246,35 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
         ),
       ]),
       html.div([class("transport-controls-right")], [
+        view_dac_crunch_toggle(model),
         view_volume_slider(model),
         view_stereo_selector(model),
       ]),
     ]),
     progress_section,
   ])
+}
+
+fn view_dac_crunch_toggle(model: Model) -> Element(Msg) {
+  html.button(
+    [
+      class(case model.dac_crunch {
+        True -> "btn btn-sm btn-dac-crunch active"
+        False -> "btn btn-sm btn-dac-crunch"
+      }),
+      event.on_click(ToggleDacCrunch),
+      attribute.title(case model.dac_crunch {
+        True -> "MOS 6581 DAC Crunch: ON (bc 6). Click to toggle clean 24-bit DSP."
+        False -> "MOS 6581 DAC Crunch: OFF (bc 0). Click to toggle 6-bit DAC crunch."
+      }),
+    ],
+    [
+      text(case model.dac_crunch {
+        True -> "🎛️ DAC: 6-Bit"
+        False -> "🎛️ DAC: Clean"
+      }),
+    ],
+  )
 }
 
 fn view_volume_slider(model: Model) -> Element(Msg) {

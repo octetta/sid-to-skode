@@ -10,12 +10,11 @@ V -8
 M 125 96
 
 # === INITIALIZATION ===
-# S0-S3 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch
-S0 S1 S2 S3
+# S0-S2 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch
+S0 S1 S2
 v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p-0.6 bc6
 v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p0.6 bc6
 v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p0.0 bc6
-v3 [Filter] vt w0 a0
 
 # Tracks setup: modulo 1 = advance 1 step per 50Hz tick
 y0 %1
@@ -4437,7 +4436,7 @@ y0
 [w16 c1,0.578 t0.004,0.008,0.00,0.012 l0] x4497
 [c1,0.469] x4498
 [c1,0.359] x4499
-[Z0 ce 127 v0] x4500
+[v0 l0 v1 l0 v2 l0 ce 127 Z0] x4500
 
 # ==============================================================================
 # TRACK 1 (Voice 2)
@@ -8619,7 +8618,7 @@ y1
 [t0.004,0.008,0.00,0.012 f554.16] x4497
 [f277.08] x4498
 [f554.16] x4499
-[v1] x4500
+[v1 l0] x4500
 
 # ==============================================================================
 # TRACK 2 (Voice 3)
@@ -13126,7 +13125,7 @@ y2
 [t0.004,0.008,0.00,0.012 f466.30] x4497
 [f233.15] x4498
 [f466.30] x4499
-[v2] x4500
+[v2 l0] x4500
 
 # ==============================================================================
 # CONDUCTOR TRACK (Filter & Volume Automation)
@@ -13134,7 +13133,6 @@ y2
 y3
 [#] x 4500
 [v0 a-8 v1 a-8 v2 a-8] x0
-[v3] x4500
 
 # === PATTERN TRANSITIONS & END OF SONG HOOK ===
 [/cer 0 Z0 O DQ ?ce!] /ceb 4 127

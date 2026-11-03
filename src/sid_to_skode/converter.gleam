@@ -437,6 +437,14 @@ pub fn convert_song(
   song: DumpSong,
   stereo: StereoMode,
 ) -> Result(ConversionResult, String) {
+  convert_song_with_options(song, stereo, True)
+}
+
+pub fn convert_song_with_options(
+  song: DumpSong,
+  stereo: StereoMode,
+  dac_crunch: Bool,
+) -> Result(ConversionResult, String) {
   let frame_count = song.frame_count
   case frame_count == 0 {
     True -> Error("SID dump contains 0 frames.")
@@ -457,6 +465,11 @@ pub fn convert_song(
         )
       }
 
+      let bc_suffix = case dac_crunch {
+        True -> " bc6"
+        False -> ""
+      }
+
       // Initial header
       let init_header = [
         "# ==============================================================================",
@@ -471,12 +484,16 @@ pub fn convert_song(
         "M 125 96",
         "",
         "# === INITIALIZATION ===",
-        "# S0-S3 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch",
-        "S0 S1 S2 S3",
-        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> " bc6",
-        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> " bc6",
-        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> " bc6",
-        "v3 [Filter] vt w0 a0",
+        case dac_crunch {
+          True ->
+            "# S0-S2 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch"
+          False ->
+            "# S0-S2 clear voice state -- clean 24-bit floating point DSP"
+        },
+        "S0 S1 S2",
+        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
+        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
+        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
         "y0 %1",
@@ -599,28 +616,27 @@ pub fn convert_song(
       let t0_text =
         list.reverse(ch0_lines_rev)
         |> list.prepend("[#] x " <> s_last_str)
-        |> list.append(["[Z0 ce 127 v0] x" <> s_last_str])
+        |> list.append(["[v0 l0 v1 l0 v2 l0 ce 127 Z0] x" <> s_last_str])
         |> string.join("\n")
 
       // Track 1
       let t1_text =
         list.reverse(ch1_lines_rev)
         |> list.prepend("[#] x " <> s_last_str)
-        |> list.append(["[v1] x" <> s_last_str])
+        |> list.append(["[v1 l0] x" <> s_last_str])
         |> string.join("\n")
 
       // Track 2
       let t2_text =
         list.reverse(ch2_lines_rev)
         |> list.prepend("[#] x " <> s_last_str)
-        |> list.append(["[v2] x" <> s_last_str])
+        |> list.append(["[v2 l0] x" <> s_last_str])
         |> string.join("\n")
 
       // Conductor / Filter Track 3
       let cond_text =
         list.reverse(cond_lines_rev)
         |> list.prepend("[#] x " <> s_last_str)
-        |> list.append(["[v3] x" <> s_last_str])
         |> string.join("\n")
 
       let track_blocks = [

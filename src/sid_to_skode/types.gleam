@@ -123,6 +123,7 @@ pub type Model {
     raw_dump_text: String,
     source_description: String,
     hvsc_path: Option(String),
+    dac_crunch: Bool,
   )
 }
 
@@ -153,4 +154,6 @@ pub type Msg {
   CopySkodeClicked
   ConversionFailed(String)
   ToggleReplClicked
+  ToggleDacCrunch
+  SeekStep(Int)
 }

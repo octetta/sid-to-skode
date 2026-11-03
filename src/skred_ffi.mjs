@@ -206,8 +206,7 @@ export function setMasterVolume(volDb) {
 
 export function panicEngine() {
   stopPlayback();
-  executeSkredCommand("S-1");
-  executeSkredCommand("Y-1");
+  executeSkredCommand("v0 l0; v1 l0; v2 l0; S-1; Y-1");
 }
 
 function flushCommandQueue() {
@@ -271,7 +270,10 @@ function startWasmEventPump(M) {
             // Real-time Step Tracking: event type 9 (SKRED_CONTROL_EVENT_PATTERN_STEP) on pattern 0
             if (isPlaybackActive && t === 9 && p === 0) {
               if (s !== lastReportedStep && s >= 0) {
-                if (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) {
+                if (
+                  (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) ||
+                  (activeSongTotalSteps > 0 && s >= activeSongTotalSteps - 1)
+                ) {
                   stopPlayback();
                   if (playbackEndedCallback) playbackEndedCallback();
                   return;
@@ -436,7 +438,19 @@ export function stopPlayback() {
   lastReportedStep = -1;
   stopWasmEventPump();
   ensureAudioContext();
-  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; Y-1");
+}
+
+export function seekToStep(step) {
+  if (!isPlaybackActive) return;
+  const s = Math.max(0, Math.floor(step));
+  lastReportedStep = s;
+  executeSkredCommand(`y0 zg ${s}; y1 zg ${s}; y2 zg ${s}; y3 zg ${s}; y127 zg ${s};`);
+}
+
+export function setDacCrunch(enabled) {
+  const bcVal = enabled ? 6 : 0;
+  executeSkredCommand(`v0 bc ${bcVal}; v1 bc ${bcVal}; v2 bc ${bcVal};`);
 }
 
 export function setStereoProfile(mode) {
