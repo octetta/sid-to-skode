@@ -1747,6 +1747,26 @@ fn default_filter_frame() -> FilterFrame {
   )
 }
 
+fn truncate_preview_lines(full_text: String, max_lines: Int) -> String {
+  let lines = string.split(full_text, "\n")
+  let count = list.length(lines)
+  case count > max_lines {
+    True -> {
+      let preview =
+        lines
+        |> list.take(max_lines)
+        |> string.join("\n")
+      preview
+      <> "\n\n# ... [Showing first "
+      <> int.to_string(max_lines)
+      <> " lines of "
+      <> int.to_string(count)
+      <> ". Use 'Copy Script' or 'Download .SK' for the complete file]"
+    }
+    False -> full_text
+  }
+}
+
 fn view_tab_skode(model: Model) -> Element(Msg) {
   case model.conversion {
     Some(conv) -> {
@@ -1771,7 +1791,7 @@ fn view_tab_skode(model: Model) -> Element(Msg) {
           ]),
         ]),
         html.pre([class("code-preview-block")], [
-          html.code([], [text(conv.skode_text)]),
+          html.code([], [text(truncate_preview_lines(conv.skode_text, 400))]),
         ]),
       ])
     }
@@ -1788,7 +1808,7 @@ fn view_tab_dump(model: Model) -> Element(Msg) {
       html.span([class("viewer-filename")], [text("siddump.txt")]),
     ]),
     html.pre([class("code-preview-block")], [
-      html.code([], [text(model.raw_dump_text)]),
+      html.code([], [text(truncate_preview_lines(model.raw_dump_text, 400))]),
     ]),
   ])
 }

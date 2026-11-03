@@ -179,7 +179,7 @@ fn wave_opcode(wave_byte: Int) -> String {
 fn generate_voice_step_tokens(
   vf: VoiceFrame,
   tracker: VoiceTracker,
-  mod_voice: Int,
+  _mod_voice: Int,
 ) -> #(List(String), VoiceTracker) {
   let tokens = []
 
@@ -223,22 +223,18 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_adsr)
   }
 
-  // Ring modulation changed
-  // Note: Skred's C DSP engine requires XM-1 to disable ring modulation (amount argument is unused).
-  let #(tokens, next_ring) = case vf.ring_mod != tracker.last_ring {
-    True -> {
-      let xm_str = case vf.ring_mod {
-        True -> "XM" <> int.to_string(mod_voice)
-        False -> "XM-1"
-      }
-      #([xm_str, ..tokens], vf.ring_mod)
-    }
-    False -> #(tokens, tracker.last_ring)
-  }
+  // Ring modulation:
+  // SID ring modulation XORs phase accumulator MSBs (MSB1 ^ MSB3), which affects only the triangle
+  // wave and continues oscillating even when the modulator voice has zero volume / gate off.
+  // In Skred's C DSP engine, 'XM' is 4-quadrant PCM sample multiplication (f *= sv.sample[mod]).
+  // Emitting 'XM' when the modulator is silent mutes the voice to 0.0, destroying melodic tunes
+  // like Commando where Voice 1 rapidly multiplexes between lead notes and drum noise.
+  // We keep track of ring_mod in VoiceTracker but do not emit destructive audio-multiplication XM.
+  let next_ring = vf.ring_mod
 
   // Frequency and Gate transitions
   let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
-  let gate_turned_on = vf.gate && !tracker.last_gate
+  let gate_turned_on = vf.gate && !tracker.last_gate && vf.freq > 0
   let gate_turned_off = !vf.gate && tracker.last_gate
 
   // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
@@ -253,7 +249,7 @@ fn generate_voice_step_tokens(
   // Gate and Voice Attack events:
   // In Skred, 'l1' (velocity 1) attacks the voice envelope.
   // We emit 'l1' when:
-  // 1. Gate turns on (note-on).
+  // 1. Gate turns on with valid frequency (note-on).
   // 2. Gate is held active, but ADSR parameters change (e.g. percussion hits).
   // 3. Gate is held active, but pitch changes after sustain has reached 0.
   // 4. Gate is held active, but pitch changes after being held (staccato re-attack).
@@ -261,7 +257,7 @@ fn generate_voice_step_tokens(
   // NOTE: 'vt' is voice-text-set and is IMMEDIATE-ONLY; never compile 'vt' into pattern steps!
   let should_attack =
     gate_turned_on
-    || { vf.gate && adsr_changed }
+    || { vf.gate && adsr_changed && vf.freq > 0 }
     || { vf.gate && freq_changed && tracker.frames_held >= 2 }
     || { vf.gate && freq_changed && vf.sustain == 0 }
 
@@ -475,10 +471,11 @@ pub fn convert_song(
         "M 125 96",
         "",
         "# === INITIALIZATION ===",
+        "# S0-S3 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch",
         "S0 S1 S2 S3",
-        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0,
-        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1,
-        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2,
+        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> " bc6",
+        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> " bc6",
+        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> " bc6",
         "v3 [Filter] vt w0 a0",
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
