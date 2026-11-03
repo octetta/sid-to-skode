@@ -190,6 +190,14 @@ Whenever any featured classic or random online SID is loaded, direct links appea
 - `🌐 DeepSID ↗`: Opens the tune directly in Chordian's DeepSID web player.
 - `📥 .SID ↗`: Direct download of the original `.sid` file from the High Voltage SID Collection mirror.
 
+### Clean Initial State & Shareable Deep Links (`?url=...`)
+- **Clean Startup:** The web studio starts in a clean, quiet state with zero audio files auto-loaded on launch.
+- **Deep Linking:** Launch directly into any public SID or DeepSID tune by appending `?url=...` to the URL:
+  - DeepSID link: `https://octetta.github.io/sid-to-skode/?url=https://deepsid.chordian.net/?file=/MUSICIANS/W/Whittaker_David/Glider_Rider.sid`
+  - HVSC path: `https://octetta.github.io/sid-to-skode/?url=/MUSICIANS/W/Whittaker_David/Glider_Rider.sid`
+  - Featured title: `https://octetta.github.io/sid-to-skode/?url=commando`
+- **Shareable URL Synchronization:** As you switch songs, the browser address bar dynamically syncs to `?url=...` for instant one-click sharing.
+
 ---
 
 ## Standalone CLI (`cli.gleam`)

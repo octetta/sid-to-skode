@@ -994,7 +994,10 @@ export async function loadDemoSid(
         resolvedHvscPath = match.hvscPath;
         sourceDesc = "🌐 HVSC Online: /" + match.hvscPath;
         if (!targetDuration) targetDuration = match.duration;
-      } else {
+      } else if (
+        cleanUrl.includes("commando") ||
+        filename.toLowerCase().includes("commando")
+      ) {
         resolvedHvscPath = "MUSICIANS/H/Hubbard_Rob/Commando.sid";
         sourceDesc = "📁 Bundled Demo: " + filename;
       }
@@ -1005,17 +1008,21 @@ export async function loadDemoSid(
     // Attempt retrieval sequence:
     // 1. Direct public CORS CDN (GitHub raw / jsdelivr HVSC mirror)
     // 2. Vite local dev proxy (/hvsc/)
-    // 3. Bundled high-impact fallback (demos/commando.sid)
+    // 3. Bundled Commando fallback ONLY when specifically requesting Commando
     let buf = null;
     const candidates = [];
 
     if (resolvedHvscPath) {
       candidates.push({
-        url: "https://raw.githubusercontent.com/Rodartist/C64Music/master/" + resolvedHvscPath,
+        url:
+          "https://raw.githubusercontent.com/Rodartist/C64Music/master/" +
+          resolvedHvscPath,
         desc: "🌐 HVSC GitHub CDN: /" + resolvedHvscPath,
       });
       candidates.push({
-        url: "https://cdn.jsdelivr.net/gh/Rodartist/C64Music@master/" + resolvedHvscPath,
+        url:
+          "https://cdn.jsdelivr.net/gh/Rodartist/C64Music@master/" +
+          resolvedHvscPath,
         desc: "🌐 HVSC jsDelivr: /" + resolvedHvscPath,
       });
       candidates.push({
@@ -1026,14 +1033,20 @@ export async function loadDemoSid(
       candidates.push({ url: cleanUrl, desc: "🌐 Direct URL: " + cleanUrl });
     }
 
-    // Single high-impact bundled fallback (Commando)
-    const fallbackDemoUrl = typeof window !== "undefined"
-      ? new URL("demos/commando.sid", window.location.href).href
-      : "demos/commando.sid";
-    candidates.push({
-      url: fallbackDemoUrl,
-      desc: "📁 Bundled Fallback: commando.sid",
-    });
+    // Bundled fallback ONLY when Commando was explicitly requested
+    if (
+      cleanUrl.includes("commando") ||
+      filename.toLowerCase().includes("commando")
+    ) {
+      const fallbackDemoUrl =
+        typeof window !== "undefined"
+          ? new URL("demos/commando.sid", window.location.href).href
+          : "demos/commando.sid";
+      candidates.push({
+        url: fallbackDemoUrl,
+        desc: "📁 Bundled Demo: commando.sid",
+      });
+    }
 
     let lastError = null;
     for (const cand of candidates) {
@@ -1067,15 +1080,16 @@ export async function loadDemoSid(
       throw new Error("Could not dump SID registers for " + filename);
     }
 
-    // Update browser URL query parameter with shareable ?file=/...
+    // Update browser URL query parameter with shareable ?url=...
     if (typeof window !== "undefined" && window.history && window.history.replaceState) {
       try {
         const paramVal = resolvedHvscPath ? "/" + resolvedHvscPath : filename;
         const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set("file", paramVal);
-        newUrl.searchParams.delete("url");
+        newUrl.searchParams.set("url", paramVal);
+        newUrl.searchParams.delete("file");
         newUrl.searchParams.delete("sid");
         newUrl.searchParams.delete("tune");
+        newUrl.searchParams.delete("id");
         window.history.replaceState(null, "", newUrl.toString());
       } catch (e) {}
     }
@@ -1122,16 +1136,9 @@ export async function checkInitialUrlParams(callback) {
     }
   }
 
-  // If no URL parameter specified, load bundled Commando as default
+  // If no URL parameter specified, do NOT auto-load any song on startup
   if (!target) {
-    return loadDemoSid(
-      "demos/commando.sid",
-      "commando.sid",
-      "Commando",
-      "Rob Hubbard",
-      callback,
-      null,
-    );
+    return false;
   }
 
   target = decodeURIComponent(target).trim();
@@ -1186,8 +1193,7 @@ export async function checkInitialUrlParams(callback) {
     author,
     callback,
     (err) => {
-      console.warn("[sid-to-skode] Failed to load URL tune, falling back to Commando:", err);
-      loadDemoSid("demos/commando.sid", "commando.sid", "Commando", "Rob Hubbard", callback, null);
+      console.warn("[sid-to-skode] Failed to load URL tune:", err);
     },
   );
 }
