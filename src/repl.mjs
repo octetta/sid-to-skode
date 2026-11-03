@@ -99,7 +99,7 @@ function handleCommand(cmd) {
   f<hz>           Set frequency in Hz (e.g. 'f440')
   l<0|1>          Gate & Attack: l1 = Gate ON (Attack), l0 = Gate OFF (Release)
   c1,<duty>       CZ Phase-Distortion PWM (-0.98 to +0.98, 0.0 = 50% square)
-  XM<mod>,<1|0>   Ring modulation from voice <mod> (e.g. 'XM2,1')
+  XM<mod>         Ring modulation from voice <mod> (e.g. 'XM2', 'XM-1' off)
 
 • Realtime Biquad Filter (lowercase):
   j<0..5>         Filter mode (0=off, 1=LP, 2=HP, 3=BP, 4=Notch, 5=All)

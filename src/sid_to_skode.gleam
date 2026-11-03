@@ -1564,15 +1564,8 @@ fn view_tab_voices(model: Model, song: DumpSong) -> Element(Msg) {
       )
   }
 
-  let #(p0, p1, p2) = model.voice_pan
   html.div([class("voices-tab-layout")], [
     view_register_strip(step_idx, song.frame_count, frame),
-    html.div([class("voices-grid")], [
-      view_voice_channel_card(0, "Voice 1", "$D400-$D406", frame.v1, p0),
-      view_voice_channel_card(1, "Voice 2", "$D407-$D40D", frame.v2, p1),
-      view_voice_channel_card(2, "Voice 3", "$D40E-$D414", frame.v3, p2),
-    ]),
-    view_filter_card(frame.filter),
   ])
 }
 
@@ -1603,25 +1596,25 @@ fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
       ]),
     ]),
     html.div([class("reg-blocks-row mono")], [
-      reg_block("V1 $D400", [
+      reg_block(voice_reg_header("V1", "$D400", v1), [
         reg_val("Freq", "$" <> hex4(v1.freq), v1.freq_changed),
         reg_val("PW", "$" <> hex4(v1.pulse_width), v1.pulse_changed),
         reg_val("Ctrl", "$" <> hex2(v1.waveform_byte), v1.wave_changed),
         reg_val("ADSR", "$" <> hex4(v1.adsr), v1.adsr_changed),
       ]),
-      reg_block("V2 $D407", [
+      reg_block(voice_reg_header("V2", "$D407", v2), [
         reg_val("Freq", "$" <> hex4(v2.freq), v2.freq_changed),
         reg_val("PW", "$" <> hex4(v2.pulse_width), v2.pulse_changed),
         reg_val("Ctrl", "$" <> hex2(v2.waveform_byte), v2.wave_changed),
         reg_val("ADSR", "$" <> hex4(v2.adsr), v2.adsr_changed),
       ]),
-      reg_block("V3 $D40E", [
+      reg_block(voice_reg_header("V3", "$D40E", v3), [
         reg_val("Freq", "$" <> hex4(v3.freq), v3.freq_changed),
         reg_val("PW", "$" <> hex4(v3.pulse_width), v3.pulse_changed),
         reg_val("Ctrl", "$" <> hex2(v3.waveform_byte), v3.wave_changed),
         reg_val("ADSR", "$" <> hex4(v3.adsr), v3.adsr_changed),
       ]),
-      reg_block("FLT $D415", [
+      reg_block(filter_reg_header(flt), [
         reg_val("Cutoff", "$" <> hex4(flt.cutoff), flt.cutoff_changed),
         reg_val("Res/R", "$" <> hex2(flt.res_routing), flt.ctrl_changed),
         reg_val(
@@ -1632,6 +1625,43 @@ fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
       ]),
     ]),
   ])
+}
+
+fn voice_reg_header(v_name: String, addr: String, vf: VoiceFrame) -> String {
+  let wave_str = case vf.waveform_byte {
+    b if b >= 128 -> "Noise"
+    b if b >= 64 -> "Pulse"
+    b if b >= 32 -> "Saw"
+    b if b >= 16 -> "Tri"
+    _ -> "Off"
+  }
+  let gate_str = case vf.gate {
+    True -> " [GATE]"
+    False -> ""
+  }
+  v_name
+  <> " "
+  <> addr
+  <> " · "
+  <> vf.note_name
+  <> " ("
+  <> wave_str
+  <> ")"
+  <> gate_str
+}
+
+fn filter_reg_header(flt: FilterFrame) -> String {
+  let route_str = case flt.route_v1, flt.route_v2, flt.route_v3 {
+    True, True, True -> " (V1+V2+V3)"
+    True, True, False -> " (V1+V2)"
+    True, False, True -> " (V1+V3)"
+    False, True, True -> " (V2+V3)"
+    True, False, False -> " (V1)"
+    False, True, False -> " (V2)"
+    False, False, True -> " (V3)"
+    _, _, _ -> ""
+  }
+  "FLT $D415 · " <> flt.mode_str <> route_str
 }
 
 fn reg_block(label: String, items: List(Element(Msg))) -> Element(Msg) {
@@ -1706,224 +1736,6 @@ fn default_filter_frame() -> FilterFrame {
     mode_changed: False,
     vol_changed: False,
   )
-}
-
-fn view_voice_channel_card(
-  c: Int,
-  label: String,
-  addr_range: String,
-  vf: VoiceFrame,
-  pan: Float,
-) -> Element(Msg) {
-  let hz = converter.freq_to_hz(vf.freq)
-  let hz_str = converter.format_float(hz, 1) <> " Hz"
-  let wave_desc = case vf.waveform_byte {
-    b if b >= 128 -> "Noise (w5)"
-    b if b >= 64 -> "Analog Square / PWM (w16)"
-    b if b >= 32 -> "Analog Sawtooth (w15)"
-    b if b >= 16 -> "Analog Triangle (w18)"
-    _ -> "Rest / Off"
-  }
-  let duty_pct =
-    converter.format_float(int.to_float(vf.pulse_width) /. 40.95, 1) <> "%"
-
-  html.div([class("voice-card")], [
-    html.div([class("voice-card-header")], [
-      html.div([class("voice-title-group")], [
-        html.h4([class("voice-title")], [text(label)]),
-        html.span([class("voice-addr-badge mono")], [text(addr_range)]),
-      ]),
-      html.span(
-        [
-          class(case vf.gate {
-            True -> "gate-badge gate-on"
-            False -> "gate-badge gate-off"
-          }),
-        ],
-        [
-          text(case vf.gate {
-            True -> "GATE ON"
-            False -> "GATE OFF"
-          }),
-        ],
-      ),
-    ]),
-    html.div([class("voice-pan-card-row")], [
-      html.div([class("voice-pan-card-header")], [
-        html.span([class("voice-pan-card-label")], [
-          text("Stereo Pan (v" <> int.to_string(c) <> " p)"),
-        ]),
-        html.span([class("voice-pan-card-val mono")], [
-          text(
-            format_pan_label(pan)
-            <> " ("
-            <> converter.format_float(pan, 2)
-            <> ")",
-          ),
-        ]),
-      ]),
-      html.div([class("voice-pan-slider-container")], [
-        html.span([class("pan-card-end-label mono")], [text("L")]),
-        html.input([
-          type_("range"),
-          attribute.min("-1.0"),
-          attribute.max("1.0"),
-          attribute.step("0.05"),
-          attribute.value(converter.format_float(pan, 2)),
-          class("pan-card-slider"),
-          attribute.title(
-            label
-            <> " Pan: "
-            <> format_pan_label(pan)
-            <> " (v"
-            <> int.to_string(c)
-            <> " p"
-            <> converter.format_float(pan, 2)
-            <> ")",
-          ),
-          event.on_input(fn(val) {
-            case float.parse(val) {
-              Ok(f) -> VoicePanChanged(c, f)
-              Error(_) -> VoicePanChanged(c, 0.0)
-            }
-          }),
-        ]),
-        html.span([class("pan-card-end-label mono")], [text("R")]),
-        html.button(
-          [
-            class("btn-pan-center mono"),
-            event.on_click(VoicePanChanged(c, 0.0)),
-            attribute.title(
-              "Center Voice " <> int.to_string(c + 1) <> " (0.00)",
-            ),
-          ],
-          [text("C")],
-        ),
-      ]),
-    ]),
-    html.div([class("voice-specs-grid")], [
-      spec_item_with_delta(
-        "Note / Freq",
-        vf.note_name <> " (" <> hz_str <> ") · $" <> hex4(vf.freq),
-        vf.freq_changed,
-      ),
-      spec_item_with_delta(
-        "Waveform",
-        wave_desc <> " · $" <> hex2(vf.waveform_byte),
-        vf.wave_changed,
-      ),
-      spec_item_with_delta(
-        "Pulse Width",
-        duty_pct <> " · $" <> hex4(vf.pulse_width),
-        vf.pulse_changed,
-      ),
-      spec_item_with_delta(
-        "ADSR",
-        int.to_string(vf.attack)
-          <> "/"
-          <> int.to_string(vf.decay)
-          <> "/"
-          <> int.to_string(vf.sustain)
-          <> "/"
-          <> int.to_string(vf.release)
-          <> " · $"
-          <> hex4(vf.adsr),
-        vf.adsr_changed,
-      ),
-      spec_item("Modulation", case vf.ring_mod, vf.sync {
-        True, True -> "RingMod + HardSync"
-        True, False -> "RingMod active"
-        False, True -> "HardSync active"
-        False, False -> "None"
-      }),
-      spec_item(
-        "Track / Voice",
-        "y" <> int.to_string(c) <> " -> v" <> int.to_string(c),
-      ),
-    ]),
-  ])
-}
-
-fn spec_item(label: String, val: String) -> Element(Msg) {
-  html.div([class("spec-item")], [
-    html.span([class("spec-label")], [text(label)]),
-    html.span([class("spec-val mono")], [text(val)]),
-  ])
-}
-
-fn spec_item_with_delta(
-  label: String,
-  val: String,
-  changed: Bool,
-) -> Element(Msg) {
-  html.div(
-    [
-      class(case changed {
-        True -> "spec-item spec-item-changed"
-        False -> "spec-item"
-      }),
-    ],
-    [
-      html.div([class("spec-label-row")], [
-        html.span([class("spec-label")], [text(label)]),
-        case changed {
-          True -> html.span([class("delta-badge")], [text("Δ WRITE")])
-          False -> none()
-        },
-      ]),
-      html.span([class("spec-val mono")], [text(val)]),
-    ],
-  )
-}
-
-fn view_filter_card(ff: FilterFrame) -> Element(Msg) {
-  let cutoff_hz = converter.cutoff_to_hz(ff.cutoff)
-  let q_res = converter.res_to_q(ff.resonance)
-
-  html.div([class("filter-card")], [
-    html.div([class("filter-header")], [
-      html.div([class("filter-title-group")], [
-        html.h4([class("filter-title")], [
-          text("Biquad Filter & Routing (Track 3)"),
-        ]),
-        html.span([class("filter-addr-badge mono")], [text("$D415-$D418")]),
-      ]),
-      html.span([class("badge-engine")], [text("Mode: " <> ff.mode_str)]),
-    ]),
-    html.div([class("filter-specs-grid")], [
-      spec_item_with_delta(
-        "Cutoff (k)",
-        converter.format_float(cutoff_hz, 1) <> " Hz · $" <> hex4(ff.cutoff),
-        ff.cutoff_changed,
-      ),
-      spec_item_with_delta(
-        "Resonance (q)",
-        "Q "
-          <> converter.format_float(q_res, 2)
-          <> " (reg "
-          <> int.to_string(ff.resonance)
-          <> ")",
-        ff.ctrl_changed,
-      ),
-      spec_item_with_delta(
-        "Channel Routing",
-        case ff.route_v1, ff.route_v2, ff.route_v3 {
-          True, True, True -> "Voices 1, 2, 3 filtered"
-          True, True, False -> "Voices 1, 2 filtered"
-          True, False, False -> "Voice 1 filtered"
-          False, True, False -> "Voice 2 filtered"
-          False, False, True -> "Voice 3 filtered"
-          _, _, _ -> "None (Bypassed)"
-        },
-        ff.ctrl_changed,
-      ),
-      spec_item_with_delta(
-        "Master SID Vol",
-        int.to_string(ff.volume) <> " / 15",
-        ff.vol_changed,
-      ),
-    ]),
-  ])
 }
 
 fn view_tab_skode(model: Model) -> Element(Msg) {

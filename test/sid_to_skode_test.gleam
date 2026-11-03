@@ -127,10 +127,10 @@ pub fn ring_modulation_and_release_pitch_test() {
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
   // Voice 1 Ring modulation active on frame 0
-  string.contains(res.skode_text, "XM2,1") |> should.be_true
+  string.contains(res.skode_text, "XM2") |> should.be_true
 
   // Ring modulation disabled on frame 1 (noise)
-  string.contains(res.skode_text, "XM2,0") |> should.be_true
+  string.contains(res.skode_text, "XM-1") |> should.be_true
 
   // Release pitch modulation: pitch changes even though gate is off!
   string.contains(res.skode_text, "f45.28") |> should.be_true

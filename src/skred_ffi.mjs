@@ -127,6 +127,11 @@ export function executeSkredCommand(rawCmd) {
       cmd = "/cer 0 Z0 O DQ ?ce!; S-1; Y-1";
     } else if (trimmed === "play") {
       cmd = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1";
+    } else if (/^XM\s*(-?\d+)\s*,\s*0/i.test(cmd.trim())) {
+      // Skred ring modulation disable requires XM-1, since sv.ring_amount is unused in DSP
+      cmd = "XM-1";
+    } else if (/^XM\s*(\d+)\s*,\s*1/i.test(cmd.trim())) {
+      cmd = cmd.trim().replace(/^XM\s*(\d+)\s*,\s*1/i, "XM$1");
     } else if (/^t\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i.test(cmd.trim())) {
       // De-click protection for ADSR 't' command
       // On real SID hardware (MOS 6581/8580), Attack 0 is 2.0ms and Release 0 is 6.0ms.

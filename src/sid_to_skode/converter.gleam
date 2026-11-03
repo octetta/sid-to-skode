@@ -224,11 +224,12 @@ fn generate_voice_step_tokens(
   }
 
   // Ring modulation changed
+  // Note: Skred's C DSP engine requires XM-1 to disable ring modulation (amount argument is unused).
   let #(tokens, next_ring) = case vf.ring_mod != tracker.last_ring {
     True -> {
       let xm_str = case vf.ring_mod {
-        True -> "XM" <> int.to_string(mod_voice) <> ",1"
-        False -> "XM" <> int.to_string(mod_voice) <> ",0"
+        True -> "XM" <> int.to_string(mod_voice)
+        False -> "XM-1"
       }
       #([xm_str, ..tokens], vf.ring_mod)
     }
