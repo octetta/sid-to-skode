@@ -54,6 +54,49 @@ function ensureAudioContext() {
   }
 }
 
+let sidCombosLoaded = false;
+function initSidComboWavetables() {
+  if (sidCombosLoaded) return;
+  const size = 1024;
+  const sawTri = [];
+  const sawPulse = [];
+  const triPulse = [];
+  const allThree = [];
+
+  for (let i = 0; i < size; i++) {
+    const phase = i / size;
+    // 12-bit Saw (0..4095)
+    const s = Math.min(4095, Math.floor(phase * 4096));
+    // 12-bit Tri (0..4095)
+    const t = phase < 0.5
+      ? Math.min(4095, Math.floor(phase * 2 * 4096))
+      : Math.min(4095, Math.floor((1.0 - (phase - 0.5) * 2) * 4096));
+    // 12-bit 50% Pulse (0 or 4095)
+    const p = phase < 0.5 ? 4095 : 0;
+
+    const st = s & t;
+    const sp = s & p;
+    const tp = t & p;
+    const stp = s & t & p;
+
+    sawTri.push(((st / 2047.5) - 1.0).toFixed(4));
+    sawPulse.push(((sp / 2047.5) - 1.0).toFixed(4));
+    triPulse.push(((tp / 2047.5) - 1.0).toFixed(4));
+    allThree.push(((stp / 2047.5) - 1.0).toFixed(4));
+  }
+
+  // Register in user dynamic wavetable slots:
+  // w300: Saw + Triangle ($30)
+  // w301: Saw + Pulse ($60)
+  // w302: Tri + Pulse ($50)
+  // w303: Tri + Saw + Pulse ($70)
+  executeSkredCommand(`(${sawTri.join(",")}) /d 300, 48000, 0`);
+  executeSkredCommand(`(${sawPulse.join(",")}) /d 301, 48000, 0`);
+  executeSkredCommand(`(${triPulse.join(",")}) /d 302, 48000, 0`);
+  executeSkredCommand(`(${allThree.join(",")}) /d 303, 48000, 0`);
+  sidCombosLoaded = true;
+}
+
 export function ensureEngineRunning() {
   const M = getWasmModule();
   if (!M) return false;
@@ -87,6 +130,7 @@ export function ensureEngineRunning() {
     executeSkredCommand("V" + currentMasterVolume);
     executeSkredCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
     executeSkredCommand("[play]: ?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1;");
+    initSidComboWavetables();
     flushCommandQueue();
     return engineStarted;
   } catch (err) {

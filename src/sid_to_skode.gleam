@@ -1628,12 +1628,21 @@ fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
 }
 
 fn voice_reg_header(v_name: String, addr: String, vf: VoiceFrame) -> String {
-  let wave_str = case vf.waveform_byte {
-    b if b >= 128 -> "Noise"
-    b if b >= 64 -> "Pulse"
-    b if b >= 32 -> "Saw"
-    b if b >= 16 -> "Tri"
-    _ -> "Off"
+  let is_tri = int.bitwise_and(vf.waveform_byte, 0x10) != 0
+  let is_saw = int.bitwise_and(vf.waveform_byte, 0x20) != 0
+  let is_pulse = int.bitwise_and(vf.waveform_byte, 0x40) != 0
+  let is_noise = int.bitwise_and(vf.waveform_byte, 0x80) != 0
+
+  let wave_str = case is_noise, is_saw, is_pulse, is_tri {
+    True, _, _, _ -> "Noise"
+    _, True, True, True -> "Tri+Saw+Pulse"
+    _, True, True, False -> "Saw+Pulse"
+    _, False, True, True -> "Tri+Pulse"
+    _, True, False, True -> "Saw+Tri"
+    _, True, False, False -> "Saw"
+    _, False, True, False -> "Pulse"
+    _, False, False, True -> "Tri"
+    _, False, False, False -> "Off"
   }
   let gate_str = case vf.gate {
     True -> " [GATE]"

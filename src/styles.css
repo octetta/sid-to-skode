@@ -898,12 +898,15 @@ html, body {
   text-decoration: underline;
 }
 
-/* 5. Tabs */
+/* 5. Tabs Navigation Bar */
 .tabs-nav {
   display: flex;
+  align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 2px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
@@ -916,32 +919,101 @@ html, body {
 
 .tab-btn {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.02);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-bottom: none;
   color: var(--text-muted);
   padding: 8px 16px;
   font-size: 0.88rem;
   cursor: pointer;
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
   font-family: var(--font-sans);
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.15s ease;
 }
 
 .tab-btn:hover {
   color: var(--text-main);
-  background-color: var(--bg-subtle);
-  border-color: var(--border-light);
+  background-color: var(--bg-card-hover);
+  border-color: var(--accent-cyan);
 }
 
 .tab-btn.active {
-  color: var(--accent-green);
+  color: #051614;
+  background: linear-gradient(135deg, #00ffb4, #38bdf8);
+  border-color: #00ffb4;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(0, 255, 180, 0.35);
+}
+
+.tab-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.voices-tab-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.info-tab-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.song-info-card {
   background-color: var(--bg-card);
-  border-color: var(--accent-green);
-  border-bottom: 2px solid var(--accent-green);
-  font-weight: 600;
-  box-shadow: 0 -2px 8px rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.song-info-card .card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+}
+
+.song-info-card .card-body-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-main);
+  white-space: pre-line;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 20px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-key {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.info-val {
+  font-size: 0.9rem;
+  color: var(--text-main);
 }
 
 /* 6. Tables & Code Viewer */
