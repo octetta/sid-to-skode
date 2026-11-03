@@ -135,3 +135,30 @@ pub fn ring_modulation_and_release_pitch_test() {
   string.contains(res.skode_text, "f45.28") |> should.be_true
   string.contains(res.skode_text, "[f2636.20] x2") |> should.be_true
 }
+
+pub fn analog_waveforms_and_headroom_test() {
+  let test_dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | AF58  E-7 D8  15 0DFB 180 | 0000  C-0 80  43 0FC4 200 | 03A9  A-1 95  21 099F 180 | 0000 00 Off F |
+|     1 | 0303 (F#1 92) 80 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(test_dump, "Analog Waves")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Header must use bandlimited analog waveforms and proper headroom
+  string.contains(res.skode_text, "v0 [Voice 1] vt w16 a-8") |> should.be_true
+  string.contains(res.skode_text, "v1 [Voice 2] vt w15 a-8") |> should.be_true
+  string.contains(res.skode_text, "v2 [Voice 3] vt w18 a-8") |> should.be_true
+  string.contains(res.skode_text, "V -8") |> should.be_true
+
+  // Step commands:
+  // Voice 1 WF 15 (triangle) -> w18
+  string.contains(res.skode_text, "w18") |> should.be_true
+  // Voice 2 WF 43 (pulse) -> w16
+  string.contains(res.skode_text, "w16") |> should.be_true
+  // Voice 3 WF 21 (saw) -> w15
+  string.contains(res.skode_text, "w15") |> should.be_true
+  // Voice 1 WF 80 (noise) -> w5
+  string.contains(res.skode_text, "w5") |> should.be_true
+}

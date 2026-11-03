@@ -118,13 +118,14 @@ pub type Model {
     stereo_mode: StereoMode,
     master_volume: Int,
     raw_dump_text: String,
+    source_description: String,
   )
 }
 
 pub type Msg {
   EngineStatusChanged(Bool)
   FileDropped(name: String, data: BitArray)
-  DumpTextReady(name: String, dump_text: String)
+  DumpTextReady(name: String, dump_text: String, source_desc: String)
   PlayClicked
   PauseClicked
   ResumeClicked

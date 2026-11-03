@@ -35,7 +35,7 @@ import sid_to_skode/types.{
 fn js_init_engine(callback: fn(Bool) -> Nil) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "registerFileDrop")
-fn js_register_file_drop(callback: fn(String, String) -> Nil) -> Nil
+fn js_register_file_drop(callback: fn(String, String, String) -> Nil) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "playSkode")
 fn js_play_skode(script: String, steps: Int) -> Nil
@@ -70,13 +70,13 @@ fn js_load_demo_sid(
   filename: String,
   title: String,
   author: String,
-  on_success: fn(String, String, String, String) -> Nil,
+  on_success: fn(String, String, String, String, String) -> Nil,
   on_error: fn(String) -> Nil,
 ) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "fetchRandomSid")
 fn js_fetch_random_sid(
-  on_success: fn(String, String, String, String) -> Nil,
+  on_success: fn(String, String, String, String, String) -> Nil,
   on_error: fn(String) -> Nil,
 ) -> Nil
 
@@ -98,8 +98,8 @@ fn init_engine_effect() -> Effect(Msg) {
 
 fn register_file_drop_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
-    js_register_file_drop(fn(filename, content) {
-      dispatch(DumpTextReady(filename, content))
+    js_register_file_drop(fn(filename, content, source_desc) {
+      dispatch(DumpTextReady(filename, content, source_desc))
     })
   })
 }
@@ -161,7 +161,9 @@ fn load_demo_effect(
       filename,
       title,
       author,
-      fn(name, content, _t, _a) { dispatch(DumpTextReady(name, content)) },
+      fn(name, content, _t, _a, src) {
+        dispatch(DumpTextReady(name, content, src))
+      },
       fn(err) { dispatch(ConversionFailed(err)) },
     )
   })
@@ -170,7 +172,9 @@ fn load_demo_effect(
 fn random_sid_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
     js_fetch_random_sid(
-      fn(name, content, _t, _a) { dispatch(DumpTextReady(name, content)) },
+      fn(name, content, _t, _a, src) {
+        dispatch(DumpTextReady(name, content, src))
+      },
       fn(err) { dispatch(ConversionFailed(err)) },
     )
   })
@@ -200,9 +204,10 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       status_text: "Ready. Drag and drop any Commodore 64 .SID file or siddump output.",
       active_tab: "info",
       catalog_info: None,
-      stereo_mode: StereoHeadphone,
-      master_volume: -6,
+      stereo_mode: StereoMono,
+      master_volume: -8,
       raw_dump_text: "",
+      source_description: "",
     )
 
   let effects =
@@ -241,7 +246,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       )
     }
 
-    DumpTextReady(filename, content) -> {
+    DumpTextReady(filename, content, source_desc) -> {
       let stop_eff = case model.is_playing {
         True -> stop_effect()
         False -> effect.none()
@@ -284,6 +289,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
                   active_song: Some(song),
                   conversion: Some(conv),
                   raw_dump_text: content,
+                  source_description: source_desc,
                   is_playing: False,
                   is_paused: False,
                   current_step: 0,
@@ -296,7 +302,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
                     <> converter.format_duration(conv.duration_seconds)
                     <> ", "
                     <> int.to_string(song.frame_count)
-                    <> " frames).",
+                    <> " frames) from "
+                    <> source_desc
+                    <> ".",
                 ),
                 stop_eff,
               )
@@ -431,6 +439,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           error_message: None,
           status_text: "Ready. Drag and drop any Commodore 64 .SID file or siddump output.",
           raw_dump_text: "",
+          source_description: "",
         ),
         stop_effect(),
       )
@@ -448,11 +457,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           is_paused: False,
           current_step: 0,
           is_converting: True,
-          status_text: "Loading demo "
+          status_text: "🌐 Fetching "
             <> title
             <> " ("
             <> author
-            <> ")...",
+            <> ") from HVSC archive...",
         ),
         effect.batch([
           stop_effect(),
@@ -469,7 +478,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           is_paused: False,
           current_step: 0,
           is_converting: True,
-          status_text: "Selecting random C64 SID tune...",
+          status_text: "🌐 Fetching random SID tune online from HVSC archive (https://hvsc.c64.org)...",
         ),
         effect.batch([stop_effect(), random_sid_effect()]),
       )
@@ -554,6 +563,10 @@ fn view_header(model: Model) -> Element(Msg) {
       html.h1([], [text("SID TO SKODE")]),
       html.span([class("badge-version")], [text("v0.1.0")]),
       html.span([class("badge-engine")], [text("Skred v0.80.0")]),
+      html.span([class("badge-analog")], [
+        text("⚡ Analog Waves: w15 / w16 / w18"),
+      ]),
+      html.span([class("badge-stereo")], [text("📻 Authentic Mono")]),
     ]),
     html.div([class("header-controls")], [
       html.div([class("engine-status")], [
@@ -582,21 +595,93 @@ fn view_header(model: Model) -> Element(Msg) {
 }
 
 pub type DemoTune {
-  DemoTune(icon: String, title: String, author: String, filename: String)
+  DemoTune(
+    icon: String,
+    title: String,
+    author: String,
+    filename: String,
+    path: String,
+  )
 }
 
 const featured_demos: List(DemoTune) = [
-  DemoTune("🎖️", "Commando", "Rob Hubbard", "commando.sid"),
-  DemoTune("🏃", "Monty on the Run", "Rob Hubbard", "monty_on_the_run.sid"),
-  DemoTune("🚀", "Sanxion", "Rob Hubbard", "sanxion.sid"),
-  DemoTune("🔺", "Delta", "Rob Hubbard", "delta.sid"),
-  DemoTune("🥋", "Int. Karate", "Rob Hubbard", "international_karate.sid"),
-  DemoTune("🍰", "Comic Bakery", "Martin Galway", "comic_bakery.sid"),
-  DemoTune("🧱", "Arkanoid", "Martin Galway", "arkanoid.sid"),
-  DemoTune("🔮", "Wizball", "Martin Galway", "wizball.sid"),
-  DemoTune("🤖", "Cybernoid", "Jeroen Tel", "cybernoid.sid"),
-  DemoTune("🍄", "Giana Sisters", "Chris Hülsbeck", "great_giana_sisters.sid"),
-  DemoTune("🥷", "Last Ninja 2", "Matt Gray", "last_ninja_2.sid"),
+  DemoTune(
+    "🎖️",
+    "Commando",
+    "Rob Hubbard",
+    "commando.sid",
+    "MUSICIANS/H/Hubbard_Rob/Commando.sid",
+  ),
+  DemoTune(
+    "🏃",
+    "Monty on the Run",
+    "Rob Hubbard",
+    "monty_on_the_run.sid",
+    "MUSICIANS/H/Hubbard_Rob/Monty_on_the_Run.sid",
+  ),
+  DemoTune(
+    "🚀",
+    "Sanxion",
+    "Rob Hubbard",
+    "sanxion.sid",
+    "MUSICIANS/H/Hubbard_Rob/Sanxion.sid",
+  ),
+  DemoTune(
+    "🔺",
+    "Delta",
+    "Rob Hubbard",
+    "delta.sid",
+    "MUSICIANS/H/Hubbard_Rob/Delta.sid",
+  ),
+  DemoTune(
+    "🥋",
+    "Int. Karate",
+    "Rob Hubbard",
+    "international_karate.sid",
+    "MUSICIANS/H/Hubbard_Rob/International_Karate.sid",
+  ),
+  DemoTune(
+    "🍰",
+    "Comic Bakery",
+    "Martin Galway",
+    "comic_bakery.sid",
+    "MUSICIANS/G/Galway_Martin/Comic_Bakery.sid",
+  ),
+  DemoTune(
+    "🧱",
+    "Arkanoid",
+    "Martin Galway",
+    "arkanoid.sid",
+    "MUSICIANS/G/Galway_Martin/Arkanoid.sid",
+  ),
+  DemoTune(
+    "🔮",
+    "Wizball",
+    "Martin Galway",
+    "wizball.sid",
+    "MUSICIANS/G/Galway_Martin/Wizball.sid",
+  ),
+  DemoTune(
+    "🤖",
+    "Cybernoid",
+    "Jeroen Tel",
+    "cybernoid.sid",
+    "MUSICIANS/T/Tel_Jeroen/Cybernoid.sid",
+  ),
+  DemoTune(
+    "🍄",
+    "Giana Sisters",
+    "Chris Hülsbeck",
+    "great_giana_sisters.sid",
+    "MUSICIANS/H/Huelsbeck_Chris/Great_Giana_Sisters.sid",
+  ),
+  DemoTune(
+    "🥷",
+    "Last Ninja 2",
+    "Matt Gray",
+    "last_ninja_2.sid",
+    "MUSICIANS/G/Gray_Matt/Last_Ninja_2.sid",
+  ),
 ]
 
 fn view_drop_zone(model: Model) -> Element(Msg) {
@@ -608,7 +693,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       ]),
       html.p([class("drop-subtitle")], [
         text(
-          "MOS 6581 / 8580 SID chiptune conversion. Synthesizes real Skred waveforms (w1 pulse, w3 saw, w4 triangle, w5 noise), CZ phase-distortion PWM (c1,#), hardware ADSR envelopes, ring modulation (XM) & realtime biquad filters.",
+          "MOS 6581 / 8580 SID chiptune conversion. Synthesizes Skred's analog-modeled waveforms (w15 analog saw, w16 analog square/PWM, w18 analog triangle, w5 noise), CZ phase-distortion PWM (c1,#), calibrated headroom, ring modulation (XM) & realtime biquad filters.",
         ),
       ]),
       html.div([class("file-select-wrapper")], [
@@ -624,20 +709,29 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       ]),
       html.div([class("demo-section")], [
         html.span([class("demo-label")], [
-          text("Or try an instant demo SID tune:"),
+          text("Or stream on the fly from the online HVSC collection:"),
         ]),
         html.div(
           [class("demo-buttons")],
           list.append(
             list.map(featured_demos, fn(demo) {
-              let url = "demos/" <> demo.filename
+              let url = demo.path
               html.button(
                 [
                   class("btn btn-secondary btn-sm"),
-                  event.on_click(LoadDemo(url, demo.filename, demo.title, demo.author)),
+                  event.on_click(LoadDemo(
+                    url,
+                    demo.filename,
+                    demo.title,
+                    demo.author,
+                  )),
                   attribute.disabled(model.is_converting),
                 ],
-                [text(demo.icon <> " " <> demo.title <> " (" <> demo.author <> ")")],
+                [
+                  text(
+                    demo.icon <> " " <> demo.title <> " (" <> demo.author <> ")",
+                  ),
+                ],
               )
             }),
             [
@@ -647,7 +741,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
                   event.on_click(RandomSidClicked),
                   attribute.disabled(model.is_converting),
                 ],
-                [text("🎲 Random SID Tune (17 Classics)")],
+                [text("🎲 Random SID Tune (Online from HVSC Archive)")],
               ),
             ],
           ),
@@ -1070,6 +1164,10 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     Some(conv) -> converter.format_duration(conv.duration_seconds)
     None -> "--:--"
   }
+  let source_display = case model.source_description {
+    "" -> "🌐 HVSC Online Archive"
+    s -> s
+  }
 
   html.div([class("metadata-bar")], [
     html.div([class("meta-item meta-title-item")], [
@@ -1079,6 +1177,12 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     html.div([class("meta-item")], [
       html.span([class("meta-label")], [text("AUTHOR")]),
       html.span([class("meta-val")], [text(clean_author)]),
+    ]),
+    html.div([class("meta-item")], [
+      html.span([class("meta-label")], [text("OSCILLATORS")]),
+      html.span([class("meta-val highlight-analog")], [
+        text("Analog (w15/w16/w18/w5)"),
+      ]),
     ]),
     html.div([class("meta-item")], [
       html.span([class("meta-label")], [text("CLOCK")]),
@@ -1093,6 +1197,10 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     html.div([class("meta-item")], [
       html.span([class("meta-label")], [text("DURATION")]),
       html.span([class("meta-val mono")], [text(duration_str)]),
+    ]),
+    html.div([class("meta-item meta-source-item")], [
+      html.span([class("meta-label")], [text("ARCHIVE SOURCE")]),
+      html.span([class("meta-val highlight-source")], [text(source_display)]),
     ]),
   ])
 }
@@ -1154,7 +1262,12 @@ fn view_tab_content(model: Model, song: DumpSong) -> Element(Msg) {
   ])
 }
 
-fn view_tab_info(_model: Model, song: DumpSong) -> Element(Msg) {
+fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
+  let source_display = case model.source_description {
+    "" -> "High Voltage SID Collection (HVSC) — https://hvsc.c64.org"
+    s -> s
+  }
+
   html.div([class("info-tab-layout")], [
     html.div([class("song-info-card")], [
       html.h3([class("card-title")], [text("Commodore 64 Sound Details")]),
@@ -1168,13 +1281,26 @@ fn view_tab_info(_model: Model, song: DumpSong) -> Element(Msg) {
           "Master Tempo",
           "M 125 96  (125 * 96 / 240 = 50.0 Hz step frequency)",
         ),
+        info_row("Archive Source", source_display),
       ]),
     ]),
     html.div([class("song-info-card")], [
-      html.h3([class("card-title")], [text("MOS SID Synthesis Architecture")]),
+      html.h3([class("card-title")], [
+        text("⚡ Skred Bandlimited Analog Waveforms & Headroom"),
+      ]),
       html.p([class("card-body-text")], [
         text(
-          "The Commodore 64 SID chip (MOS 6581/8580) features 3 independent hardware voices, each with programmable waveforms, pulse-width modulation, resonant multimode filtering, and ADSR envelope generators. sid-to-skode unrolls and delta-compresses each frame directly into 4 parallel Skode patterns (y0, y1, y2 for voices, y3 for filter automation) driving Skred's bandlimited analog oscillators.",
+          "To authentically reproduce the warmth, harmonic richness, and punch of the Commodore 64 MOS SID (6581/8580), sid-to-skode routes voices directly to Skred's bandlimited analog-modeled oscillator core:\n\n• w15 -> Bandlimited Analog Sawtooth (SID Saw)\n• w16 -> Bandlimited Analog Square / Pulse with CZ phase-distortion PWM (c1,#)\n• w18 -> Bandlimited Analog Triangle (SID Tri)\n• w5  -> SID White Noise Generator\n\nGain Staging & Headroom: Voice amplitudes are calibrated with -8 dBFS per-voice nominal headroom (V -8 dB master) so that multi-oscillator summing and high-resonance biquad filter sweeps (j/k/q) never clip or produce ear-fatiguing distortion.",
+        ),
+      ]),
+    ]),
+    html.div([class("song-info-card")], [
+      html.h3([class("card-title")], [
+        text("🌐 Public Web Archive (HVSC) Direct Streaming"),
+      ]),
+      html.p([class("card-body-text")], [
+        text(
+          "Random SID tunes and featured classics are pulled on the fly directly over HTTP from the High Voltage SID Collection mirror (https://hvsc.brona.dk/HVSC/C64Music/). Songs are emulated client-side in the browser via an embedded siddump WebAssembly module without pre-downloading or storing dumps on your machine, playing for their full natural song duration without artificial caps.",
         ),
       ]),
     ]),
@@ -1265,10 +1391,10 @@ fn view_voice_channel_card(
   let hz = converter.freq_to_hz(vf.freq)
   let hz_str = converter.format_float(hz, 1) <> " Hz"
   let wave_desc = case vf.waveform_byte {
-    b if b >= 128 -> "Noise (w6 Knuth LCG)"
-    b if b >= 64 -> "Square/PWM (w16)"
-    b if b >= 32 -> "Sawtooth (w15)"
-    b if b >= 16 -> "Triangle (w18)"
+    b if b >= 128 -> "Noise (w5)"
+    b if b >= 64 -> "Analog Square / PWM (w16)"
+    b if b >= 32 -> "Analog Sawtooth (w15)"
+    b if b >= 16 -> "Analog Triangle (w18)"
     _ -> "Rest / Off"
   }
   let duty_pct =

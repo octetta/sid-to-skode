@@ -8,6 +8,13 @@ export default defineConfig({
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp"
+    },
+    proxy: {
+      "/hvsc": {
+        target: "https://hvsc.brona.dk/HVSC/C64Music",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/hvsc/, "")
+      }
     }
   },
   preview: {
@@ -16,6 +23,13 @@ export default defineConfig({
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp"
+    },
+    proxy: {
+      "/hvsc": {
+        target: "https://hvsc.brona.dk/HVSC/C64Music",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/hvsc/, "")
+      }
     }
   }
 });

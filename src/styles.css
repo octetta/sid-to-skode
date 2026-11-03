@@ -95,6 +95,45 @@ html, body {
   border: 1px solid var(--border);
 }
 
+.badge-analog {
+  font-size: 0.72rem;
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 600;
+}
+
+.badge-stereo {
+  font-size: 0.72rem;
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-weight: 600;
+}
+
+.highlight-analog {
+  color: #fbbf24 !important;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.highlight-source {
+  color: #38bdf8 !important;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+  display: inline-block;
+}
+
 .header-controls {
   display: flex;
   align-items: center;

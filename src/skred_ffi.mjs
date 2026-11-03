@@ -401,13 +401,13 @@ export function registerFileDrop(callback) {
     try {
       const buffer = await file.arrayBuffer();
       if (name.toLowerCase().endsWith(".sid")) {
-        const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name);
+        const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name, 210);
         if (dumpText && callback) {
-          callback(name, dumpText);
+          callback(name, dumpText, "📁 Local File Drop: " + name);
         }
       } else {
         const text = new TextDecoder().decode(buffer);
-        if (callback) callback(name, text);
+        if (callback) callback(name, text, "📁 Local Dump File: " + name);
       }
     } catch (err) {
       console.error("[sid-to-skode] Error reading file:", err);
@@ -444,7 +444,7 @@ export function registerFileDrop(callback) {
   });
 }
 
-export async function runSidDumpWasm(bytes, filename) {
+export async function runSidDumpWasm(bytes, filename, durationSeconds) {
   try {
     if (!siddumpFactory) {
       const mod = await import("#vendor/siddump_wasm.js");
@@ -471,9 +471,10 @@ export async function runSidDumpWasm(bytes, filename) {
     const virtualFile = "tune.sid";
     instance.FS.writeFile(virtualFile, bytes);
 
-    // Dump up to 90 seconds (4500 frames) of subtune 0 (default song)
+    // If duration not specified, default to 210s (3.5 minutes) rather than 90s!
+    const dur = typeof durationSeconds === "number" && durationSeconds > 0 ? durationSeconds : 210;
     try {
-      instance.callMain([virtualFile, "-t90"]);
+      instance.callMain([virtualFile, "-t" + dur]);
     } catch (_) {
       // Emscripten exits with ExitStatus upon normal completion
     }
@@ -485,176 +486,514 @@ export async function runSidDumpWasm(bytes, filename) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Curated Demo Catalog & Random SID Loader
+// 4. Online HVSC Catalog & Dynamic Web Fetcher (No Pre-Download Needed)
 // ---------------------------------------------------------------------------
 
-export const SID_CATALOG = [
+export const HVSC_CATALOG = [
+  // Rob Hubbard
   {
     title: "Commando",
     author: "Rob Hubbard",
     filename: "commando.sid",
-    url: "demos/commando.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Commando.sid",
+    duration: 236,
     source: "Elite (1985)",
   },
   {
     title: "Monty on the Run",
     author: "Rob Hubbard",
     filename: "monty_on_the_run.sid",
-    url: "demos/monty_on_the_run.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Monty_on_the_Run.sid",
+    duration: 350,
     source: "Gremlin Graphics (1985)",
   },
   {
     title: "Sanxion",
     author: "Rob Hubbard",
     filename: "sanxion.sid",
-    url: "demos/sanxion.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Sanxion.sid",
+    duration: 218,
     source: "Thalamus (1986)",
   },
   {
     title: "Delta",
     author: "Rob Hubbard",
     filename: "delta.sid",
-    url: "demos/delta.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Delta.sid",
+    duration: 216,
     source: "Thalamus (1987)",
   },
   {
     title: "International Karate",
     author: "Rob Hubbard",
     filename: "international_karate.sid",
-    url: "demos/international_karate.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/International_Karate.sid",
+    duration: 240,
     source: "System 3 (1986)",
   },
   {
     title: "Crazy Comets",
     author: "Rob Hubbard",
     filename: "crazy_comets.sid",
-    url: "demos/crazy_comets.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Crazy_Comets.sid",
+    duration: 276,
     source: "Martech (1985)",
   },
   {
     title: "Lightforce",
     author: "Rob Hubbard",
     filename: "lightforce.sid",
-    url: "demos/lightforce.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Lightforce.sid",
+    duration: 250,
     source: "Faster Than Light (1986)",
   },
+  {
+    title: "Thrust",
+    author: "Rob Hubbard",
+    filename: "thrust.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Thrust.sid",
+    duration: 210,
+    source: "Firebird (1986)",
+  },
+  {
+    title: "Auf Wiedersehen Monty",
+    author: "Rob Hubbard",
+    filename: "auf_wiedersehen_monty.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Auf_Wiedersehen_Monty.sid",
+    duration: 220,
+    source: "Gremlin Graphics (1987)",
+  },
+  {
+    title: "Action Biker",
+    author: "Rob Hubbard",
+    filename: "action_biker.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Action_Biker.sid",
+    duration: 210,
+    source: "Mastertronic (1985)",
+  },
+  {
+    title: "Flash Gordon",
+    author: "Rob Hubbard",
+    filename: "flash_gordon.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Flash_Gordon.sid",
+    duration: 200,
+    source: "Mastertronic (1986)",
+  },
+  {
+    title: "Chimera",
+    author: "Rob Hubbard",
+    filename: "chimera.sid",
+    hvscPath: "MUSICIANS/H/Hubbard_Rob/Chimera.sid",
+    duration: 210,
+    source: "Firebird (1985)",
+  },
+
+  // Martin Galway
   {
     title: "Comic Bakery",
     author: "Martin Galway",
     filename: "comic_bakery.sid",
-    url: "demos/comic_bakery.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Comic_Bakery.sid",
+    duration: 189,
     source: "Imagine (1986)",
   },
   {
     title: "Arkanoid",
     author: "Martin Galway",
     filename: "arkanoid.sid",
-    url: "demos/arkanoid.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Arkanoid.sid",
+    duration: 142,
     source: "Imagine (1987)",
   },
   {
     title: "Wizball",
     author: "Martin Galway",
     filename: "wizball.sid",
-    url: "demos/wizball.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Wizball.sid",
+    duration: 215,
     source: "Ocean (1987)",
   },
   {
     title: "Rambo: First Blood Part II",
     author: "Martin Galway",
     filename: "rambo.sid",
-    url: "demos/rambo.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Rambo_First_Blood_Part_II.sid",
+    duration: 240,
     source: "Ocean (1985)",
   },
   {
     title: "Ocean Loader 2",
     author: "Martin Galway",
     filename: "ocean_loader_2.sid",
-    url: "demos/ocean_loader_2.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Ocean_Loader_2.sid",
+    duration: 253,
     source: "Ocean (1985)",
   },
   {
     title: "Green Beret",
     author: "Martin Galway",
     filename: "green_beret.sid",
-    url: "demos/green_beret.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Green_Beret.sid",
+    duration: 213,
     source: "Imagine (1986)",
   },
+  {
+    title: "Miami Vice",
+    author: "Martin Galway",
+    filename: "miami_vice.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Miami_Vice.sid",
+    duration: 195,
+    source: "Ocean (1986)",
+  },
+  {
+    title: "Parallax",
+    author: "Martin Galway",
+    filename: "parallax.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Parallax.sid",
+    duration: 230,
+    source: "Ocean (1986)",
+  },
+  {
+    title: "Terra Cresta",
+    author: "Martin Galway",
+    filename: "terra_cresta.sid",
+    hvscPath: "MUSICIANS/G/Galway_Martin/Terra_Cresta.sid",
+    duration: 200,
+    source: "Imagine (1986)",
+  },
+
+  // Jeroen Tel / Maniacs of Noise
   {
     title: "Cybernoid",
     author: "Jeroen Tel",
     filename: "cybernoid.sid",
-    url: "demos/cybernoid.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Cybernoid.sid",
+    duration: 240,
     source: "Hewson (1988)",
   },
   {
     title: "Cybernoid II",
     author: "Jeroen Tel",
     filename: "cybernoid_2.sid",
-    url: "demos/cybernoid_2.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Cybernoid_II.sid",
+    duration: 240,
     source: "Hewson (1988)",
   },
+  {
+    title: "Turbo Outrun",
+    author: "Jeroen Tel",
+    filename: "turbo_outrun.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Turbo_Outrun.sid",
+    duration: 220,
+    source: "Sega / US Gold (1989)",
+  },
+  {
+    title: "Supremacy",
+    author: "Jeroen Tel",
+    filename: "supremacy.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Supremacy.sid",
+    duration: 260,
+    source: "Virgin (1990)",
+  },
+  {
+    title: "Myth: History in the Making",
+    author: "Jeroen Tel",
+    filename: "myth.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Myth.sid",
+    duration: 240,
+    source: "System 3 (1989)",
+  },
+  {
+    title: "Rubicon",
+    author: "Jeroen Tel",
+    filename: "rubicon.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Rubicon.sid",
+    duration: 250,
+    source: "21st Century (1991)",
+  },
+  {
+    title: "Afterburner",
+    author: "Jeroen Tel",
+    filename: "afterburner.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Afterburner.sid",
+    duration: 210,
+    source: "Activision (1988)",
+  },
+  {
+    title: "Eliminator",
+    author: "Jeroen Tel",
+    filename: "eliminator.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Eliminator.sid",
+    duration: 200,
+    source: "Hewson (1988)",
+  },
+  {
+    title: "Hawkeye",
+    author: "Jeroen Tel",
+    filename: "hawkeye.sid",
+    hvscPath: "MUSICIANS/T/Tel_Jeroen/Hawkeye.sid",
+    duration: 215,
+    source: "Thalamus (1988)",
+  },
+
+  // Chris Hülsbeck
   {
     title: "The Great Giana Sisters",
     author: "Chris Hülsbeck",
     filename: "great_giana_sisters.sid",
-    url: "demos/great_giana_sisters.sid",
+    hvscPath: "MUSICIANS/H/Huelsbeck_Chris/Great_Giana_Sisters.sid",
+    duration: 222,
     source: "Rainbow Arts (1987)",
   },
+  {
+    title: "Katakis",
+    author: "Chris Hülsbeck",
+    filename: "katakis.sid",
+    hvscPath: "MUSICIANS/H/Huelsbeck_Chris/Katakis.sid",
+    duration: 240,
+    source: "Rainbow Arts (1988)",
+  },
+  {
+    title: "R-Type",
+    author: "Chris Hülsbeck",
+    filename: "r_type.sid",
+    hvscPath: "MUSICIANS/H/Huelsbeck_Chris/R-Type.sid",
+    duration: 210,
+    source: "Rainbow Arts (1988)",
+  },
+
+  // Matt Gray
   {
     title: "Last Ninja 2",
     author: "Matt Gray",
     filename: "last_ninja_2.sid",
-    url: "demos/last_ninja_2.sid",
+    hvscPath: "MUSICIANS/G/Gray_Matt/Last_Ninja_2.sid",
+    duration: 267,
     source: "System 3 (1988)",
+  },
+  {
+    title: "Treasure Island Dizzy",
+    author: "Matt Gray",
+    filename: "treasure_island_dizzy.sid",
+    hvscPath: "MUSICIANS/G/Gray_Matt/Treasure_Island_Dizzy.sid",
+    duration: 180,
+    source: "Codemasters (1989)",
+  },
+  {
+    title: "Dominator",
+    author: "Matt Gray",
+    filename: "dominator.sid",
+    hvscPath: "MUSICIANS/G/Gray_Matt/Dominator.sid",
+    duration: 210,
+    source: "System 3 (1989)",
+  },
+
+  // Ben Daglish
+  {
+    title: "The Last Ninja",
+    author: "Ben Daglish",
+    filename: "last_ninja.sid",
+    hvscPath: "MUSICIANS/D/Daglish_Ben/Last_Ninja.sid",
+    duration: 250,
+    source: "System 3 (1987)",
+  },
+  {
+    title: "Deflektor",
+    author: "Ben Daglish",
+    filename: "deflektor.sid",
+    hvscPath: "MUSICIANS/D/Daglish_Ben/Deflektor.sid",
+    duration: 210,
+    source: "Vortex (1987)",
+  },
+  {
+    title: "Trap",
+    author: "Ben Daglish",
+    filename: "trap.sid",
+    hvscPath: "MUSICIANS/D/Daglish_Ben/Trap.sid",
+    duration: 230,
+    source: "Alligata (1986)",
+  },
+  {
+    title: "Cobra",
+    author: "Ben Daglish",
+    filename: "cobra.sid",
+    hvscPath: "MUSICIANS/D/Daglish_Ben/Cobra.sid",
+    duration: 190,
+    source: "Ocean (1986)",
+  },
+
+  // Tim Follin
+  {
+    title: "Ghouls 'n Ghosts",
+    author: "Tim Follin",
+    filename: "ghouls_n_ghosts.sid",
+    hvscPath: "MUSICIANS/F/Follin_Tim/Ghouls_n_Ghosts.sid",
+    duration: 270,
+    source: "Capcom / US Gold (1989)",
+  },
+  {
+    title: "Bionic Commando",
+    author: "Tim Follin",
+    filename: "bionic_commando.sid",
+    hvscPath: "MUSICIANS/F/Follin_Tim/Bionic_Commando.sid",
+    duration: 230,
+    source: "Capcom / Go! (1988)",
+  },
+
+  // David Whittaker
+  {
+    title: "Glider Rider",
+    author: "David Whittaker",
+    filename: "glider_rider.sid",
+    hvscPath: "MUSICIANS/W/Whittaker_David/Glider_Rider.sid",
+    duration: 240,
+    source: "Quicksilva (1986)",
+  },
+  {
+    title: "Speedball",
+    author: "David Whittaker",
+    filename: "speedball.sid",
+    hvscPath: "MUSICIANS/W/Whittaker_David/Speedball.sid",
+    duration: 200,
+    source: "Image Works (1988)",
+  },
+  {
+    title: "Lazy Jones",
+    author: "David Whittaker",
+    filename: "lazy_jones.sid",
+    hvscPath: "MUSICIANS/W/Whittaker_David/Lazy_Jones.sid",
+    duration: 220,
+    source: "Terminal Software (1984)",
+  },
+
+  // Johannes Bjerregaard & Reyn Ouwehand
+  {
+    title: "Shape",
+    author: "Johannes Bjerregaard",
+    filename: "shape.sid",
+    hvscPath: "MUSICIANS/B/Bjerregaard_Johannes/Shape.sid",
+    duration: 210,
+    source: "Censor (1989)",
+  },
+  {
+    title: "Flimbo's Quest",
+    author: "Johannes Bjerregaard",
+    filename: "flimbos_quest.sid",
+    hvscPath: "MUSICIANS/B/Bjerregaard_Johannes/Flimbos_Quest_main.sid",
+    duration: 220,
+    source: "System 3 (1990)",
+  },
+  {
+    title: "Last Ninja 3",
+    author: "Reyn Ouwehand",
+    filename: "last_ninja_3.sid",
+    hvscPath: "MUSICIANS/O/Ouwehand_Reyn/Last_Ninja_3.sid",
+    duration: 240,
+    source: "System 3 (1991)",
   },
 ];
 
 export async function fetchRandomSid(onSuccess, onError) {
   try {
-    const idx = Math.floor(Math.random() * SID_CATALOG.length);
-    const item = SID_CATALOG[idx];
-    return loadDemoSid(item.url, item.filename, item.title, item.author, onSuccess, onError);
+    const idx = Math.floor(Math.random() * HVSC_CATALOG.length);
+    const item = HVSC_CATALOG[idx];
+    console.log(
+      "[sid-to-skode] Fetching random SID from HVSC:",
+      item.title,
+      "by",
+      item.author,
+      "(" + item.hvscPath + ")",
+    );
+    return loadDemoSid(
+      item.hvscPath,
+      item.filename,
+      item.title,
+      item.author,
+      onSuccess,
+      onError,
+      item.duration,
+    );
   } catch (err) {
     console.error("[sid-to-skode] Error loading random SID:", err);
-    if (onError) onError(err.message || "Failed to load demo");
+    if (onError) onError(err.message || "Failed to load random SID");
   }
 }
 
-export async function loadDemoSid(url, filename, title, author, onSuccess, onError) {
+export async function loadDemoSid(
+  url,
+  filename,
+  title,
+  author,
+  onSuccess,
+  onError,
+  targetDuration,
+) {
   try {
-    // 1. Instant loading: Try fetching pre-dumped file directly (.dump) to avoid WASM CPU overhead
-    const dumpUrl = url.replace(/\.sid$/i, ".dump");
-    const targetDumpUrl =
-      typeof window !== "undefined"
-        ? new URL(dumpUrl, window.location.href).href
-        : dumpUrl;
+    let fetchUrl = url;
+    let sourceDesc = "🌐 HVSC Online Archive: " + url;
 
-    try {
-      const dumpRes = await fetch(targetDumpUrl);
-      if (dumpRes.ok) {
-        const dumpText = await dumpRes.text();
-        if (dumpText && dumpText.length > 100) {
-          if (onSuccess) onSuccess(filename, dumpText, title, author);
-          return;
-        }
+    if (
+      url.startsWith("MUSICIANS/") ||
+      url.startsWith("GAMES/") ||
+      url.startsWith("DEMOS/")
+    ) {
+      // Relative HVSC path -> fetch via Vite proxy /hvsc/...
+      fetchUrl = "/hvsc/" + url;
+      sourceDesc = "🌐 HVSC Online: /" + url;
+    } else if (url.startsWith("demos/")) {
+      // Check if it's one of our catalog items to get real HVSC path and duration
+      const match = HVSC_CATALOG.find(
+        (c) => c.filename === filename || url.endsWith(c.filename),
+      );
+      if (match) {
+        fetchUrl = "/hvsc/" + match.hvscPath;
+        sourceDesc = "🌐 HVSC Online: /" + match.hvscPath;
+        if (!targetDuration) targetDuration = match.duration;
+      } else {
+        fetchUrl = url;
+        sourceDesc = "📁 Demo: " + filename;
       }
-    } catch (_) {
-      // Fallback to WASM emulation below if .dump fetch fails
+    } else if (url.startsWith("http")) {
+      fetchUrl = url;
+      sourceDesc = "🌐 Web SID: " + url;
     }
 
-    // 2. Emulation fallback: Fetch raw .sid binary and emulate via siddump WASM
-    const targetUrl =
-      typeof window !== "undefined"
-        ? new URL(url, window.location.href).href
-        : url;
-    const res = await fetch(targetUrl);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const buf = await res.arrayBuffer();
-    const dumpText = await runSidDumpWasm(new Uint8Array(buf), filename);
-    if (!dumpText) throw new Error("Could not dump SID tune.");
+    let buf;
+    try {
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      buf = await res.arrayBuffer();
+    } catch (fetchErr) {
+      // Fallback: If /hvsc/ proxy failed (e.g. standalone production preview), try direct mirror or bundled demo
+      const cleanPath = url.replace(/^\/?(hvsc\/)?/, "");
+      try {
+        const directUrl = "https://hvsc.brona.dk/HVSC/C64Music/" + cleanPath;
+        const res2 = await fetch(directUrl);
+        if (!res2.ok) throw new Error("Direct HTTP " + res2.status);
+        buf = await res2.arrayBuffer();
+        sourceDesc = "🌐 Direct HVSC Mirror: /" + cleanPath;
+      } catch (directErr) {
+        // Fallback 2: bundled demo in demos/ if present
+        const demoUrl = "demos/" + filename;
+        const res3 = await fetch(demoUrl);
+        if (!res3.ok) throw new Error("Could not load tune from online HVSC or local demos");
+        buf = await res3.arrayBuffer();
+        sourceDesc = "📁 Bundled Fallback: " + filename;
+      }
+    }
+
+    const dur =
+      typeof targetDuration === "number" && targetDuration > 0
+        ? targetDuration
+        : 210;
+
+    const dumpText = await runSidDumpWasm(new Uint8Array(buf), filename, dur);
+    if (!dumpText || dumpText.length < 100) {
+      throw new Error("Could not dump SID registers for " + filename);
+    }
+
     if (onSuccess) {
-      onSuccess(filename, dumpText, title, author);
+      onSuccess(filename, dumpText, title || filename, author || "Unknown", sourceDesc);
     }
   } catch (err) {
     console.error("[sid-to-skode] Error loading demo SID:", err);

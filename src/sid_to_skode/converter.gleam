@@ -146,14 +146,12 @@ fn wave_opcode(wave_byte: Int) -> String {
 
   case is_noise, is_saw, is_pulse, is_tri {
     True, _, _, _ -> "w5"
-    _, True, _, _ -> "w3"
-    _, _, True, _ -> "w1"
-    _, _, _, True -> "w4"
-    _, _, _, _ -> "w1"
+    _, True, _, _ -> "w15"
+    _, _, True, _ -> "w16"
+    _, _, _, True -> "w18"
+    _, _, _, _ -> "w16"
   }
 }
-
-
 
 /// Generates space-separated Skode command tokens for a voice frame.
 /// Pattern remembers the selected voice, so voice selection is not repeated.
@@ -365,8 +363,7 @@ fn generate_filter_step_tokens(
       q_str,
     )
 
-  let filter_tokens =
-    list.flatten([v0_toks, v1_toks, v2_toks])
+  let filter_tokens = list.flatten([v0_toks, v1_toks, v2_toks])
 
   // Volume changes: per-voice amplitude 'a' is schedulable, while master 'V' is immediate-only.
   let vol_changed = ff.volume != tracker.last_vol
@@ -374,14 +371,10 @@ fn generate_filter_step_tokens(
     True -> {
       let vol_db = case ff.volume {
         0 -> -100
-        15 -> 0
-        v -> { v - 15 } * 2
+        v -> -8 + { v - 15 } * 2
       }
       let db_str = "a" <> int.to_string(vol_db)
-      #(
-        ["v0", db_str, "v1", db_str, "v2", db_str],
-        ff.volume,
-      )
+      #(["v0", db_str, "v1", db_str, "v2", db_str], ff.volume)
     }
     False -> #([], tracker.last_vol)
   }
@@ -431,14 +424,14 @@ pub fn convert_song(
         "# ==============================================================================",
         "",
         "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",
-        "V -6",
+        "V -8",
         "M 125 96",
         "",
         "# === INITIALIZATION ===",
         "S0 S1 S2 S3",
-        "v0 [Voice 1] vt w1 a0 t0.002,0.008,0.5,0.01 p" <> p0,
-        "v1 [Voice 2] vt w3 a0 t0.002,0.008,0.5,0.01 p" <> p1,
-        "v2 [Voice 3] vt w4 a0 t0.002,0.008,0.5,0.01 p" <> p2,
+        "v0 [Voice 1] vt w16 a-8 t0.002,0.008,0.5,0.01 p" <> p0,
+        "v1 [Voice 2] vt w15 a-8 t0.002,0.008,0.5,0.01 p" <> p1,
+        "v2 [Voice 3] vt w18 a-8 t0.002,0.008,0.5,0.01 p" <> p2,
         "v3 [Filter] vt w0 a0",
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
