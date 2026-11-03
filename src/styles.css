@@ -135,12 +135,10 @@ html, body {
 .highlight-source {
   color: #38bdf8 !important;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
+  font-size: 0.82rem;
+  word-break: break-all;
   display: inline-block;
+  line-height: 1.35;
 }
 
 .header-controls {
@@ -441,22 +439,50 @@ html, body {
   background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px 20px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .transport-buttons {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-transport {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.btn-outline {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: var(--bg-subtle);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
 }
 
 .transport-controls-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 /* Master Volume Slider Control */
@@ -810,20 +836,27 @@ html, body {
   box-shadow: 0 0 10px var(--accent-green-glow);
 }
 
+.metadata-bar,
 .meta-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  align-items: center;
+  gap: 12px 20px;
   background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px 20px;
+  padding: 12px 18px;
 }
 
 .meta-item {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.meta-source-item {
+  flex: 1 1 240px;
+  min-width: 200px;
 }
 
 .meta-label {
@@ -833,10 +866,11 @@ html, body {
   letter-spacing: 0.05em;
 }
 
+.meta-val,
 .meta-value {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 600;
-  color: var(--accent-cyan);
+  color: var(--text-main);
   font-family: var(--font-mono);
 }
 
@@ -882,8 +916,9 @@ html, body {
 
 .tab-btn {
   flex-shrink: 0;
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-bottom: none;
   color: var(--text-muted);
   padding: 8px 16px;
   font-size: 0.88rem;
@@ -897,13 +932,16 @@ html, body {
 .tab-btn:hover {
   color: var(--text-main);
   background-color: var(--bg-subtle);
+  border-color: var(--border-light);
 }
 
 .tab-btn.active {
   color: var(--accent-green);
   background-color: var(--bg-card);
+  border-color: var(--accent-green);
   border-bottom: 2px solid var(--accent-green);
   font-weight: 600;
+  box-shadow: 0 -2px 8px rgba(16, 185, 129, 0.15);
 }
 
 /* 6. Tables & Code Viewer */
@@ -1380,21 +1418,18 @@ html, body {
   }
 
   .transport-buttons {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
     width: 100%;
   }
 
-  .transport-buttons .btn-lg {
-    padding: 8px 10px;
-    font-size: 0.82rem;
-    width: 100%;
-  }
-
-  /* Download .ZIP spans full width for easy one-tap export */
-  .transport-buttons .btn-primary {
-    grid-column: span 2;
+  .transport-buttons .btn-transport {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    min-height: 36px;
   }
 
   .transport-controls-right {
@@ -2092,10 +2127,16 @@ html, body {
     gap: 12px;
   }
 
-  .metadata-bar {
+  .metadata-bar,
+  .meta-bar {
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px 14px;
+    padding: 10px 12px;
   }
 
+  .meta-title-item,
+  .meta-source-item,
   .meta-item-hvsc {
     grid-column: 1 / -1;
   }
@@ -2113,7 +2154,8 @@ html, body {
 }
 
 @media (max-width: 480px) {
-  .metadata-bar {
+  .metadata-bar,
+  .meta-bar {
     grid-template-columns: 1fr;
   }
 

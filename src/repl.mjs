@@ -128,10 +128,8 @@ function handleCommand(cmd) {
   }
 
   if (lower === "-panic") {
-    executeSkredCommand("S-1");
-    executeSkredCommand("Y-1");
-    executeSkredCommand("stop");
-    appendReplOutput("warn", "Engine silenced (S-1; Y-1; stop).");
+    executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
+    appendReplOutput("warn", "Engine silenced (/cer 0 Z0 O DQ ?ce!; S-1; Y-1).");
     return;
   }
 

@@ -81,10 +81,12 @@ export function ensureEngineRunning() {
     if (typeof M._skred_logger === "function") {
       M._skred_logger(1);
     }
-    executeSkredCommand("stop");
+    executeSkredCommand("Z0");
     executeSkredCommand("Y-1");
     executeSkredCommand("S-1");
     executeSkredCommand("V" + currentMasterVolume);
+    executeSkredCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
+    executeSkredCommand("[play]: ?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1;");
     flushCommandQueue();
     return engineStarted;
   } catch (err) {
@@ -117,7 +119,17 @@ if (typeof win.addEventListener === "function") {
   win.addEventListener("click", unlockAudio, { passive: true });
 }
 
-export function executeSkredCommand(cmd) {
+export function executeSkredCommand(rawCmd) {
+  let cmd = rawCmd;
+  if (typeof cmd === "string") {
+    const trimmed = cmd.trim().toLowerCase();
+    if (trimmed === "stop") {
+      cmd = "/cer 0 Z0 O DQ ?ce!; S-1; Y-1";
+    } else if (trimmed === "play") {
+      cmd = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1";
+    }
+  }
+
   const M = getWasmModule();
   if (!M) {
     commandQueue.push(cmd);
@@ -355,9 +367,7 @@ export function playSkode(script, steps) {
   }
 
   // 1. Halt previous playback, reset patterns and voices
-  executeSkredCommand("stop");
-  executeSkredCommand("Y-1");
-  executeSkredCommand("S-1");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
 
   // 2. Write script to VFS and load it cleanly via /ls
   try {
@@ -367,12 +377,12 @@ export function playSkode(script, steps) {
       executeSkredCommand("[song.sk] /ls");
       executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("play");
+      executeSkredCommand("?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1");
     } else {
       executeSkredCommand(script);
       executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
       executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("play");
+      executeSkredCommand("?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1");
     }
     startWasmEventPump(M);
   } catch (err) {
@@ -406,9 +416,7 @@ export function stopPlayback() {
   lastReportedStep = -1;
   stopWasmEventPump();
   ensureAudioContext();
-  executeSkredCommand("stop");
-  executeSkredCommand("Y-1");
-  executeSkredCommand("S-1");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
 }
 
 export function setStereoProfile(mode) {

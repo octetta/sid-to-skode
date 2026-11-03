@@ -212,7 +212,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       is_converting: False,
       error_message: None,
       status_text: "Ready. Drag and drop any Commodore 64 .SID file or siddump output.",
-      active_tab: "info",
+      active_tab: "voices",
       catalog_info: None,
       stereo_mode: StereoMono,
       voice_pan: #(0.0, 0.0, 0.0),
@@ -977,24 +977,30 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
     False ->
       html.button(
         [
-          class("btn btn-success btn-lg"),
+          class("btn btn-success btn-transport"),
           event.on_click(PlayClicked),
           attribute.disabled(model.conversion == None),
+          attribute.title("Start playback in Skred WASM"),
         ],
-        [text("▶ Play in Skred")],
+        [text("▶ Play")],
       )
     True -> {
       case model.is_paused {
         False ->
           html.button(
-            [class("btn btn-warning btn-lg"), event.on_click(PauseClicked)],
+            [
+              class("btn btn-warning btn-transport"),
+              event.on_click(PauseClicked),
+              attribute.title("Pause playback (Z2)"),
+            ],
             [text("⏸ Pause")],
           )
         True ->
           html.button(
             [
-              class("btn btn-success btn-lg pulse-paused"),
+              class("btn btn-success btn-transport pulse-paused"),
               event.on_click(ResumeClicked),
+              attribute.title("Resume playback (Z3)"),
             ],
             [text("▶ Resume")],
           )
@@ -1005,12 +1011,20 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
   let stop_btn = case model.is_playing {
     True ->
       html.button(
-        [class("btn btn-danger btn-lg"), event.on_click(StopClicked)],
+        [
+          class("btn btn-danger btn-transport"),
+          event.on_click(StopClicked),
+          attribute.title("Stop playback (Z0; S-1)"),
+        ],
         [text("⏹ Stop")],
       )
     False ->
       html.button(
-        [class("btn btn-secondary btn-lg"), attribute.disabled(True)],
+        [
+          class("btn btn-secondary btn-transport"),
+          attribute.disabled(True),
+          attribute.title("Playback stopped"),
+        ],
         [text("⏹ Stop")],
       )
   }
@@ -1107,23 +1121,29 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
         stop_btn,
         html.button(
           [
-            class("btn btn-primary btn-lg"),
+            class("btn btn-outline btn-transport"),
             event.on_click(DownloadSkodeClicked),
             attribute.disabled(model.conversion == None),
+            attribute.title("Download compiled Skode script (.sk)"),
           ],
-          [text("💾 Download .SK")],
+          [text("💾 .SK")],
         ),
         html.button(
           [
-            class("btn btn-modarchive btn-lg"),
+            class("btn btn-outline btn-transport"),
             event.on_click(RandomSidClicked),
             attribute.disabled(model.is_converting),
+            attribute.title("Load random SID tune from HVSC online"),
           ],
-          [text("🎲 Random SID")],
+          [text("🎲 Random")],
         ),
         html.button(
-          [class("btn btn-secondary btn-lg"), event.on_click(ResetClicked)],
-          [text("⟲ New File")],
+          [
+            class("btn btn-outline btn-transport"),
+            event.on_click(ResetClicked),
+            attribute.title("Eject tune and choose another file"),
+          ],
+          [text("⟲ New")],
         ),
       ]),
       html.div([class("transport-controls-right")], [
@@ -1341,7 +1361,13 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     ]),
     html.div([class("meta-item meta-source-item")], [
       html.span([class("meta-label")], [text("ARCHIVE SOURCE")]),
-      html.span([class("meta-val highlight-source")], [text(source_display)]),
+      html.span(
+        [
+          class("meta-val highlight-source"),
+          attribute.title(source_display),
+        ],
+        [text(source_display)],
+      ),
     ]),
   ]
 
@@ -1353,22 +1379,24 @@ fn view_tabs_navigation(model: Model) -> Element(Msg) {
     html.button(
       [
         class(case model.active_tab {
-          "info" -> "tab-btn active"
-          _ -> "tab-btn"
-        }),
-        event.on_click(TabSelected("info")),
-      ],
-      [text("ℹ️ Tune Info")],
-    ),
-    html.button(
-      [
-        class(case model.active_tab {
           "voices" -> "tab-btn active"
           _ -> "tab-btn"
         }),
         event.on_click(TabSelected("voices")),
+        attribute.title("Live SID Oscillators, ADSR Envelopes, Waveforms & Biquad Filter"),
       ],
       [text("🎛️ SID Voices & Filter")],
+    ),
+    html.button(
+      [
+        class(case model.active_tab {
+          "info" -> "tab-btn active"
+          _ -> "tab-btn"
+        }),
+        event.on_click(TabSelected("info")),
+        attribute.title("Tune Metadata, Authorship & Synthesis Architecture"),
+      ],
+      [text("ℹ️ Tune Info")],
     ),
     html.button(
       [
