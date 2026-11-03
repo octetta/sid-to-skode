@@ -13135,10 +13135,10 @@ y3
 [v0 a-8 v1 a-8 v2 a-8] x0
 
 # === PATTERN TRANSITIONS & END OF SONG HOOK ===
-[/cer 0 Z0 O DQ ?ce!] /ceb 4 127
+[/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1] /ceb 4 127
 /cer 1
 
 # === MACROS ===
 # The file does not start automatically. Type 'play' to begin, and 'stop' to halt.
 [play]: ?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1;
-[stop]: /cer 0 Z0 O DQ ?ce!;
+[stop]: /cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1;

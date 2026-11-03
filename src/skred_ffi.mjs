@@ -14,6 +14,7 @@ let playbackStepCallback = null;
 let playbackEndedCallback = null;
 let activeSongTotalSteps = 0;
 let lastReportedStep = -1;
+let loadedSongScript = null;
 
 let siddumpFactory = null;
 
@@ -124,7 +125,7 @@ export function executeSkredCommand(rawCmd) {
   if (typeof cmd === "string") {
     const trimmed = cmd.trim().toLowerCase();
     if (trimmed === "stop") {
-      cmd = "/cer 0 Z0 O DQ ?ce!; S-1; Y-1";
+      cmd = "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;";
     } else if (trimmed === "play") {
       cmd = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1";
     } else if (/^XM\s*(-?\d+)\s*,\s*0/i.test(cmd.trim())) {
@@ -206,7 +207,14 @@ export function setMasterVolume(volDb) {
 
 export function panicEngine() {
   stopPlayback();
+  loadedSongScript = null;
   executeSkredCommand("v0 l0; v1 l0; v2 l0; S-1; Y-1");
+}
+
+export function ejectSong() {
+  stopPlayback();
+  loadedSongScript = null;
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; Y-1;");
 }
 
 function flushCommandQueue() {
@@ -372,11 +380,12 @@ export function initEngine(callback) {
 // 2. Playback Transport Controls
 // ---------------------------------------------------------------------------
 
-export function playSkode(script, steps) {
+export function playSkode(script, steps, startStep = 0) {
+  const initialStep = typeof startStep === "number" ? Math.max(0, Math.floor(startStep)) : 0;
   activeSongTotalSteps = typeof steps === "number" ? steps : 0;
   isPlaybackActive = true;
   isPlaybackPaused = false;
-  lastReportedStep = -1;
+  lastReportedStep = initialStep > 0 ? initialStep : -1;
 
   unlockAudio();
   ensureAudioContext();
@@ -388,23 +397,34 @@ export function playSkode(script, steps) {
     return;
   }
 
-  // 1. Halt previous playback, reset patterns and voices
-  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
-
-  // 2. Write script to VFS and load it cleanly via /ls
   try {
-    if (M.FS) {
-      try { M.FS.writeFile("/song.sk", script); } catch (e) {}
-      try { M.FS.writeFile("song.sk", script); } catch (e) {}
-      executeSkredCommand("[song.sk] /ls");
-      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+    const playSeqCmd = initialStep > 0
+      ? `?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1; y0 zg ${initialStep}; y1 zg ${initialStep}; y2 zg ${initialStep}; y3 zg ${initialStep}; y127 zg ${initialStep};`
+      : `?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1`;
+
+    if (loadedSongScript === script) {
+      // Re-playing already loaded song: patterns remain preserved in Skred memory!
+      executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1;");
       executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1");
+      executeSkredCommand(playSeqCmd);
     } else {
-      executeSkredCommand(script);
-      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
-      executeSkredCommand("V" + currentMasterVolume);
-      executeSkredCommand("?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1");
+      // New or modified song: halt, reset patterns, and compile cleanly
+      executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
+
+      if (M.FS) {
+        try { M.FS.writeFile("/song.sk", script); } catch (e) {}
+        try { M.FS.writeFile("song.sk", script); } catch (e) {}
+        executeSkredCommand("[song.sk] /ls");
+        executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+        executeSkredCommand("V" + currentMasterVolume);
+        executeSkredCommand(playSeqCmd);
+      } else {
+        executeSkredCommand(script);
+        executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+        executeSkredCommand("V" + currentMasterVolume);
+        executeSkredCommand(playSeqCmd);
+      }
+      loadedSongScript = script;
     }
     startWasmEventPump(M);
   } catch (err) {
@@ -438,11 +458,10 @@ export function stopPlayback() {
   lastReportedStep = -1;
   stopWasmEventPump();
   ensureAudioContext();
-  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; Y-1");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
 }
 
 export function seekToStep(step) {
-  if (!isPlaybackActive) return;
   const s = Math.max(0, Math.floor(step));
   lastReportedStep = s;
   executeSkredCommand(`y0 zg ${s}; y1 zg ${s}; y2 zg ${s}; y3 zg ${s}; y127 zg ${s};`);

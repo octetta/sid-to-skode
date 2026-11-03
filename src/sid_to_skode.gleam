@@ -41,7 +41,10 @@ fn js_register_file_drop(
 ) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "playSkode")
-fn js_play_skode(script: String, steps: Int) -> Nil
+fn js_play_skode(script: String, steps: Int, start_step: Int) -> Nil
+
+@external(javascript, "./skred_ffi.mjs", "ejectSong")
+fn js_eject_song() -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "pausePlayback")
 fn js_pause_playback() -> Nil
@@ -133,8 +136,12 @@ fn register_playback_listener_effect() -> Effect(Msg) {
   })
 }
 
-fn play_effect(script: String, total_steps: Int) -> Effect(Msg) {
-  effect.from(fn(_dispatch) { js_play_skode(script, total_steps) })
+fn play_effect(script: String, total_steps: Int, start_step: Int) -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_play_skode(script, total_steps, start_step) })
+}
+
+fn eject_effect() -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_eject_song() })
 }
 
 fn pause_effect() -> Effect(Msg) {
@@ -355,15 +362,15 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     PlayClicked -> {
       case model.conversion {
         Some(conv) -> {
+          let step = model.current_step
           #(
             Model(
               ..model,
               is_playing: True,
               is_paused: False,
-              current_step: 0,
               status_text: "Playing in Skred WASM (50 Hz step clock)...",
             ),
-            play_effect(conv.skode_text, conv.total_steps),
+            play_effect(conv.skode_text, conv.total_steps, step),
           )
         }
         None -> #(model, effect.none())
@@ -480,7 +487,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           source_description: "",
           hvsc_path: None,
         ),
-        stop_effect(),
+        eject_effect(),
       )
     }
 
