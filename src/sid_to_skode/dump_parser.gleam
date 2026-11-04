@@ -1,11 +1,14 @@
 //// Pure Gleam parser for siddump text output.
 
 import gleam/dict
+import gleam/float
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/string
 import sid_to_skode/types.{
-  type DumpSong, type FilterFrame, type SidFrame, type VoiceFrame, DumpSong,
+  type DigiEvent, type DigiSample, type DumpSong, type FilterFrame,
+  type SidFrame, type VoiceFrame, DigiEvent, DigiSample, DumpSong,
   FilterFrame, SidFrame, VoiceFrame,
 }
 
@@ -16,6 +19,9 @@ pub type ParserState {
     prev_v3: VoiceFrame,
     prev_filter: FilterFrame,
     frames: List(SidFrame),
+    digi_samples: List(DigiSample),
+    current_sample_meta: Option(#(Int, Float, Int)),
+    digi_events: List(DigiEvent),
   )
 }
 
@@ -233,45 +239,136 @@ fn parse_filter_cell(raw: String, prev: FilterFrame) -> FilterFrame {
 
 fn parse_line(line: String, state: ParserState) -> Result(ParserState, Nil) {
   let trimmed = string.trim(line)
-  case string.starts_with(trimmed, "|") && !string.contains(trimmed, "Frame") {
-    False -> Error(Nil)
+  case string.starts_with(trimmed, "# DIGI_SAMPLE ") {
     True -> {
       let parts =
-        string.split(trimmed, "|")
+        string.drop_start(trimmed, 14)
+        |> string.split(" ")
         |> list.filter(fn(p) { string.length(p) > 0 })
-
       case parts {
-        [frame_str, v1_str, v2_str, v3_str, filt_str, ..] -> {
-          let frame_idx = case int.parse(string.trim(frame_str)) {
-            Ok(idx) -> idx
-            Error(_) -> list.length(state.frames)
+        [slot_str, rate_str, len_str, ..] -> {
+          case
+            int.parse(slot_str),
+            float.parse(rate_str),
+            int.parse(len_str)
+          {
+            Ok(slot), Ok(rate), Ok(len) ->
+              Ok(ParserState(..state, current_sample_meta: Some(#(slot, rate, len))))
+            _, _, _ ->
+              // In case rate was formatted as integer like 6842 without decimal point:
+              case int.parse(slot_str), int.parse(rate_str), int.parse(len_str) {
+                Ok(slot), Ok(rate_i), Ok(len) ->
+                  Ok(ParserState(
+                    ..state,
+                    current_sample_meta: Some(#(slot, int.to_float(rate_i), len)),
+                  ))
+                _, _, _ -> Error(Nil)
+              }
           }
-
-          let v1 = parse_voice_cell(v1_str, state.prev_v1)
-          let v2 = parse_voice_cell(v2_str, state.prev_v2)
-          let v3 = parse_voice_cell(v3_str, state.prev_v3)
-          let filt = parse_filter_cell(filt_str, state.prev_filter)
-
-          let frame =
-            SidFrame(
-              frame_index: frame_idx,
-              v1: v1,
-              v2: v2,
-              v3: v3,
-              filter: filt,
-            )
-
-          Ok(
-            ParserState(
-              prev_v1: v1,
-              prev_v2: v2,
-              prev_v3: v3,
-              prev_filter: filt,
-              frames: [frame, ..state.frames],
-            ),
-          )
         }
         _ -> Error(Nil)
+      }
+    }
+    False -> {
+      case string.starts_with(trimmed, "# DATA ") {
+        True -> {
+          case state.current_sample_meta {
+            Some(#(slot, rate, len)) -> {
+              let samples =
+                string.drop_start(trimmed, 7)
+                |> string.split(" ")
+                |> list.filter_map(fn(s) {
+                  let tr = string.trim(s)
+                  case tr {
+                    "" -> Error(Nil)
+                    _ -> float.parse(tr)
+                  }
+                })
+              let sample = DigiSample(slot, rate, len, samples)
+              Ok(
+                ParserState(
+                  ..state,
+                  digi_samples: [sample, ..state.digi_samples],
+                  current_sample_meta: None,
+                ),
+              )
+            }
+            None -> Error(Nil)
+          }
+        }
+        False -> {
+          case string.starts_with(trimmed, "# DIGI_EVENT ") {
+            True -> {
+              let parts =
+                string.drop_start(trimmed, 13)
+                |> string.split(" ")
+                |> list.filter(fn(p) { string.length(p) > 0 })
+              case parts {
+                [frame_str, slot_str, ..] -> {
+                  case int.parse(frame_str), int.parse(slot_str) {
+                    Ok(fr), Ok(sl) ->
+                      Ok(
+                        ParserState(
+                          ..state,
+                          digi_events: [DigiEvent(fr, sl), ..state.digi_events],
+                        ),
+                      )
+                    _, _ -> Error(Nil)
+                  }
+                }
+                _ -> Error(Nil)
+              }
+            }
+            False -> {
+              case
+                string.starts_with(trimmed, "|")
+                && !string.contains(trimmed, "Frame")
+              {
+                False -> Error(Nil)
+                True -> {
+                  let parts =
+                    string.split(trimmed, "|")
+                    |> list.filter(fn(p) { string.length(p) > 0 })
+
+                  case parts {
+                    [frame_str, v1_str, v2_str, v3_str, filt_str, ..] -> {
+                      let frame_idx = case int.parse(string.trim(frame_str)) {
+                        Ok(idx) -> idx
+                        Error(_) -> list.length(state.frames)
+                      }
+
+                      let v1 = parse_voice_cell(v1_str, state.prev_v1)
+                      let v2 = parse_voice_cell(v2_str, state.prev_v2)
+                      let v3 = parse_voice_cell(v3_str, state.prev_v3)
+                      let filt = parse_filter_cell(filt_str, state.prev_filter)
+
+                      let frame =
+                        SidFrame(
+                          frame_index: frame_idx,
+                          v1: v1,
+                          v2: v2,
+                          v3: v3,
+                          filter: filt,
+                        )
+
+                      Ok(
+                        ParserState(
+                          ..state,
+                          prev_v1: v1,
+                          prev_v2: v2,
+                          prev_v3: v3,
+                          prev_filter: filt,
+                          frames: [frame, ..state.frames],
+                        ),
+                      )
+                    }
+                    _ -> Error(Nil)
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -286,6 +383,9 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
       prev_v3: default_voice(),
       prev_filter: default_filter(),
       frames: [],
+      digi_samples: [],
+      current_sample_meta: None,
+      digi_events: [],
     )
 
   let final_state =
@@ -312,6 +412,8 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
         frame_dict: frame_dict,
         frame_count: count,
         frame_rate: 50.0,
+        digi_samples: list.reverse(final_state.digi_samples),
+        digi_events: list.reverse(final_state.digi_events),
       ))
     False -> Error("No valid SID dump rows found in file.")
   }

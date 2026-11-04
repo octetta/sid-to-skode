@@ -65,6 +65,22 @@ pub type FilterFrame {
   )
 }
 
+pub type DigiSample {
+  DigiSample(
+    slot: Int,
+    rate: Float,
+    length: Int,
+    samples: List(Float),
+  )
+}
+
+pub type DigiEvent {
+  DigiEvent(
+    frame: Int,
+    slot: Int,
+  )
+}
+
 pub type SidFrame {
   SidFrame(
     frame_index: Int,
@@ -84,6 +100,8 @@ pub type DumpSong {
     frame_dict: Dict(Int, SidFrame),
     frame_count: Int,
     frame_rate: Float,
+    digi_samples: List(DigiSample),
+    digi_events: List(DigiEvent),
   )
 }
 

@@ -753,6 +753,13 @@ pub type DemoTune {
 
 const featured_demos: List(DemoTune) = [
   DemoTune(
+    "🥁",
+    "Great Giana Sisters (PCM Digi)",
+    "Chris Hülsbeck",
+    "great_giana_sisters.sid",
+    "demos/great_giana_sisters.sid",
+  ),
+  DemoTune(
     "🛩️",
     "Glider Rider",
     "David Whittaker",

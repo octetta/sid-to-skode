@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "cpu.h"
 
 #define FN 0x80
 #define FV 0x40
@@ -30,6 +31,8 @@
 
 int voice_gate_cleared[3] = {0, 0, 0};
 int voice_retriggered[3] = {0, 0, 0};
+int in_playroutine = 0;
+int current_play_frame = 0;
 
 void reset_voice_triggers(void) {
   voice_gate_cleared[0] = voice_gate_cleared[1] = voice_gate_cleared[2] = 0;
@@ -39,6 +42,13 @@ void reset_voice_triggers(void) {
 #define WRITE(address)                  \
 {                                       \
   unsigned short _a = (address);        \
+  if (_a == 0x04 && in_playroutine) {   \
+    unsigned short _sample_addr = (mem[0x04] << 8) | mem[0x03]; \
+    unsigned short _end_addr = (mem[0x02] << 8); \
+    if (_sample_addr >= 0x1000) {       \
+      record_digi_trigger(_sample_addr, _end_addr, current_play_frame); \
+    }                                   \
+  }                                     \
   for (int _ch = 0; _ch < 3; _ch++) {   \
     if (_a == 0xd404 + 7 * _ch) {       \
       int _gate = mem[_a] & 1;          \

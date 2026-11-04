@@ -1067,11 +1067,23 @@ export async function loadDemoSid(
     }
 
     // Attempt retrieval sequence:
-    // 1. Direct public CORS CDN (GitHub raw / jsdelivr HVSC mirror)
-    // 2. Vite local dev proxy (/hvsc/)
-    // 3. Bundled Commando fallback ONLY when specifically requesting Commando
+    // 1. Locally bundled demo files in public/demos/ (instant offline availability)
+    // 2. Direct public CORS CDN (GitHub raw / jsdelivr HVSC mirror)
+    // 3. Vite local dev proxy (/hvsc/)
     let buf = null;
     const candidates = [];
+
+    if (cleanUrl.startsWith("demos/") || cleanUrl.includes("great_giana_sisters") || cleanUrl.includes("commando")) {
+      const demoFile = cleanUrl.startsWith("demos/") ? cleanUrl : "demos/" + filename;
+      const fallbackDemoUrl =
+        typeof window !== "undefined"
+          ? new URL(demoFile, window.location.href).href
+          : demoFile;
+      candidates.push({
+        url: fallbackDemoUrl,
+        desc: "📁 Bundled Demo: " + filename,
+      });
+    }
 
     if (resolvedHvscPath) {
       candidates.push({
@@ -1092,21 +1104,6 @@ export async function loadDemoSid(
       });
     } else if (cleanUrl.startsWith("http")) {
       candidates.push({ url: cleanUrl, desc: "🌐 Direct URL: " + cleanUrl });
-    }
-
-    // Bundled fallback ONLY when Commando was explicitly requested
-    if (
-      cleanUrl.includes("commando") ||
-      filename.toLowerCase().includes("commando")
-    ) {
-      const fallbackDemoUrl =
-        typeof window !== "undefined"
-          ? new URL("demos/commando.sid", window.location.href).href
-          : "demos/commando.sid";
-      candidates.push({
-        url: fallbackDemoUrl,
-        desc: "📁 Bundled Demo: commando.sid",
-      });
     }
 
     let lastError = null;

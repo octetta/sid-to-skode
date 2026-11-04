@@ -485,63 +485,128 @@ pub fn convert_song_with_options(
         False -> ""
       }
 
+      let has_digi = !list.is_empty(song.digi_samples)
+
+      let digi_header_lines = case has_digi {
+        True -> {
+          let sample_blocks =
+            list.map(song.digi_samples, fn(s) {
+              let sample_vals =
+                list.map(s.samples, fn(val) { format_float(val, 3) })
+                |> string.join(" ")
+              let rate_str = format_float(s.rate, 0)
+              let slot_str = int.to_string(s.slot)
+              "# Digi Sample w"
+              <> slot_str
+              <> " ("
+              <> int.to_string(s.length)
+              <> " samples @ "
+              <> rate_str
+              <> " Hz)\n( "
+              <> sample_vals
+              <> " ) /d "
+              <> slot_str
+              <> ","
+              <> rate_str
+            })
+          list.flatten([
+            [
+              "# --- Extracted C64 PCM Digi Samples ---",
+              "/D 4096",
+            ],
+            sample_blocks,
+            [""],
+          ])
+        }
+        False -> []
+      }
+
+      let init_voices = case has_digi {
+        True -> [
+          "S0 S1 S2 S3",
+          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
+          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
+          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
+          "v3 [Digi Percussion] vt a0 t0.001,0.001,1.0,0.001 p0.0",
+        ]
+        False -> [
+          "S0 S1 S2",
+          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
+          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
+          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
+        ]
+      }
+
       // Initial header
-      let init_header = [
-        "# ==============================================================================",
-        "# Converted from: " <> song.title <> " (" <> song.author <> ")",
-        "# Frames: " <> int.to_string(frame_count) <> " @ 50.0 Hz (PAL C64)",
-        "# Duration: " <> format_duration(duration_seconds),
-        "# Generated for Skred v0.80.0",
-        "# ==============================================================================",
-        "",
-        "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",
-        "V -8",
-        "M 125 96",
-        "",
-        "# --- SID ksynth Oscillator Core ---",
-        "# w300: SID Bandlimited Triangle (odd harmonics 1/h^2, alternating phase)",
-        "[P: ~4096; H: !64; H: H+1; M: s(H*1.5707963); A: (1%(H*H))*M; W: w P $ A] k!",
-        "k>w300",
-        "",
-        "# w301: SID Bandlimited Sawtooth (all harmonics 1/h)",
-        "[P: ~4096; H: !64; H: H+1; A: 1%H; W: w P $ A] k!",
-        "k>w301",
-        "",
-        "# w302: SID Bandlimited Square/Pulse (odd harmonics 1/h + CZ PWM c1)",
-        "[P: ~4096; H: !64; H: H+1; M: a(s(H*1.5707963)); A: (1%H)*M; W: w P $ A] k!",
-        "k>w302",
-        "",
-        "# w303: SID Combined Saw+Triangle ($30 hybrid)",
-        "[P: ~4096; H: !64; H: H+1; As: 1%H; At: (1%(H*H))*s(H*1.5707963); S: P $ As; T: P $ At; W: w (S*0.6)+(T*0.4)] k!",
-        "k>w303",
-        "",
-        "# w304: SID Combined Saw+Pulse ($60 hybrid)",
-        "[P: ~4096; H: !64; H: H+1; As: 1%H; Ap: (1%H)*a(s(H*1.5707963)); S: P $ As; U: P $ Ap; W: w (S*0.5)+(U*0.5)] k!",
-        "k>w304",
-        "",
-        "# === INITIALIZATION ===",
-        case dac_crunch {
-          True ->
-            "# S0-S2 clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch"
-          False ->
-            "# S0-S2 clear voice state -- clean 24-bit floating point DSP"
-        },
-        "S0 S1 S2",
-        "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
-        "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
-        "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
-        "",
-        "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
-        "y0 %1",
-        "y1 %1",
-        "y2 %1",
-        "y3 %1",
-        "",
-        "# === THE MASTER CONDUCTOR ===",
-        "# y127 provides downbeat synchronization and song tracking",
-        "y127 %1 [v0] x" <> int.to_string(s_last) <> " yp127",
-        "",
-      ]
+      let init_header =
+        list.flatten([
+          [
+            "# ==============================================================================",
+            "# Converted from: " <> song.title <> " (" <> song.author <> ")",
+            "# Frames: " <> int.to_string(frame_count) <> " @ 50.0 Hz (PAL C64)",
+            "# Duration: " <> format_duration(duration_seconds),
+            "# Generated for Skred v0.80.0",
+            "# ==============================================================================",
+            "",
+            "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",
+            "V -8",
+            "M 125 96",
+            "",
+            "# --- SID ksynth Oscillator Core ---",
+            "# w300: SID Bandlimited Triangle (odd harmonics 1/h^2, alternating phase)",
+            "[P: ~4096; H: !64; H: H+1; M: s(H*1.5707963); A: (1%(H*H))*M; W: w P $ A] k!",
+            "k>w300",
+            "",
+            "# w301: SID Bandlimited Sawtooth (all harmonics 1/h)",
+            "[P: ~4096; H: !64; H: H+1; A: 1%H; W: w P $ A] k!",
+            "k>w301",
+            "",
+            "# w302: SID Bandlimited Square/Pulse (odd harmonics 1/h + CZ PWM c1)",
+            "[P: ~4096; H: !64; H: H+1; M: a(s(H*1.5707963)); A: (1%H)*M; W: w P $ A] k!",
+            "k>w302",
+            "",
+            "# w303: SID Combined Saw+Triangle ($30 hybrid)",
+            "[P: ~4096; H: !64; H: H+1; As: 1%H; At: (1%(H*H))*s(H*1.5707963); S: P $ As; T: P $ At; W: w (S*0.6)+(T*0.4)] k!",
+            "k>w303",
+            "",
+            "# w304: SID Combined Saw+Pulse ($60 hybrid)",
+            "[P: ~4096; H: !64; H: H+1; As: 1%H; Ap: (1%H)*a(s(H*1.5707963)); S: P $ As; U: P $ Ap; W: w (S*0.5)+(U*0.5)] k!",
+            "k>w304",
+            "",
+          ],
+          digi_header_lines,
+          [
+            "# === INITIALIZATION ===",
+            case dac_crunch {
+              True ->
+                "# Clear voice state -- bc6 emulates MOS 6581/8580 non-linear 8-bit DAC crunch"
+              False ->
+                "# Clear voice state -- clean 24-bit floating point DSP"
+            },
+          ],
+          init_voices,
+          [
+            "",
+            "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
+            "y0 %1",
+            "y1 %1",
+            "y2 %1",
+            "y3 %1",
+            "",
+            "# === THE MASTER CONDUCTOR ===",
+            "# y127 provides downbeat synchronization and song tracking",
+            "y127 %1 [v0] x" <> int.to_string(s_last) <> " yp127",
+            "",
+          ],
+        ])
+
+      let digi_events_map =
+        list.map(song.digi_events, fn(e) { #(e.frame, e.slot) })
+        |> dict.from_list
+
+      let digi_samples_map =
+        list.map(song.digi_samples, fn(s) { #(s.slot, s) })
+        |> dict.from_list
 
       // State tracking accumulator for all 3 voices + filter
       let initial_acc = #(
@@ -622,12 +687,37 @@ pub fn convert_song_with_options(
             _ -> ["[" <> string.join(toks2, " ") <> "] x" <> step_str, ..lines2]
           }
 
-          // Conductor / Filter (Track 3)
+          // Conductor / Filter / Digi (Track 3)
           let #(toks_f, ntf) = generate_filter_step_tokens(frame.filter, tf)
-          let new_lines_cond = case toks_f {
+
+          let digi_toks = case dict.get(digi_events_map, step_idx) {
+            Ok(slot) -> {
+              case dict.get(digi_samples_map, slot) {
+                Ok(s) -> {
+                  let hz = s.rate /. int.to_float(s.length)
+                  [
+                    "v3",
+                    "w" <> int.to_string(slot) <> ",1,1",
+                    "f" <> format_float(hz, 3),
+                    "l1",
+                  ]
+                }
+                Error(_) -> [
+                  "v3",
+                  "w" <> int.to_string(slot) <> ",1,1",
+                  "f13.36",
+                  "l1",
+                ]
+              }
+            }
+            Error(_) -> []
+          }
+
+          let combined_cond_toks = list.append(toks_f, digi_toks)
+          let new_lines_cond = case combined_cond_toks {
             [] -> lines_cond
             _ -> [
-              "[" <> string.join(toks_f, " ") <> "] x" <> step_str,
+              "[" <> string.join(combined_cond_toks, " ") <> "] x" <> step_str,
               ..lines_cond
             ]
           }
@@ -649,10 +739,14 @@ pub fn convert_song_with_options(
       let s_last_str = int.to_string(s_last)
 
       // Track 0
+      let t0_stop_voices = case has_digi {
+        True -> "[v0 l0 v1 l0 v2 l0 v3 l0 ce 127 Z0] x"
+        False -> "[v0 l0 v1 l0 v2 l0 ce 127 Z0] x"
+      }
       let t0_text =
         list.reverse(ch0_lines_rev)
         |> list.prepend("[#] x " <> s_last_str)
-        |> list.append(["[v0 l0 v1 l0 v2 l0 ce 127 Z0] x" <> s_last_str])
+        |> list.append([t0_stop_voices <> s_last_str])
         |> string.join("\n")
 
       // Track 1
@@ -703,7 +797,10 @@ pub fn convert_song_with_options(
       ]
 
       // Stop & Play Macros matching Skred v0.80.0
-      let stop_cmds = "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1"
+      let stop_cmds = case has_digi {
+        True -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; S-1"
+        False -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1"
+      }
       let play_cmds = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1"
 
       let end_blocks = [

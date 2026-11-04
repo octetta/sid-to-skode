@@ -38,6 +38,94 @@ FILTER prevfilt;
 
 extern unsigned short pc;
 
+#define MAX_DIGI_SAMPLES 32
+#define MAX_DIGI_EVENTS 16384
+
+typedef struct {
+  unsigned short start_addr;
+  unsigned short end_addr;
+  unsigned int sample_rate;
+  unsigned int length_bytes;
+  unsigned int length_samples;
+  int wave_slot;
+  float *samples;
+} DIGI_SAMPLE;
+
+typedef struct {
+  int frame;
+  int wave_slot;
+} DIGI_EVENT;
+
+DIGI_SAMPLE digi_samples[MAX_DIGI_SAMPLES];
+int num_digi_samples = 0;
+
+DIGI_EVENT digi_events[MAX_DIGI_EVENTS];
+int num_digi_events = 0;
+
+void record_digi_trigger(unsigned short sample_addr, unsigned short end_addr, int frame) {
+  int slot = -1;
+  for (int i = 0; i < num_digi_samples; i++) {
+    if (digi_samples[i].start_addr == sample_addr) {
+      slot = digi_samples[i].wave_slot;
+      break;
+    }
+  }
+
+  if (slot == -1 && num_digi_samples < MAX_DIGI_SAMPLES) {
+    int idx = num_digi_samples++;
+    digi_samples[idx].start_addr = sample_addr;
+    if (end_addr <= sample_addr || (end_addr - sample_addr) > 0x2000) {
+      end_addr = sample_addr + 0x0100;
+    }
+    digi_samples[idx].end_addr = end_addr;
+    digi_samples[idx].length_bytes = end_addr - sample_addr;
+    digi_samples[idx].length_samples = digi_samples[idx].length_bytes * 2;
+    digi_samples[idx].sample_rate = 6842;
+    digi_samples[idx].wave_slot = 310 + idx;
+    digi_samples[idx].samples = (float *)malloc(digi_samples[idx].length_samples * sizeof(float));
+
+    int s_idx = 0;
+    for (unsigned int b_addr = sample_addr; b_addr < end_addr; b_addr++) {
+      unsigned char b = mem[b_addr];
+      float s1 = ((float)(b & 0x0F) - 7.5f) / 7.5f;
+      float s2 = ((float)(b >> 4) - 7.5f) / 7.5f;
+      digi_samples[idx].samples[s_idx++] = s1;
+      digi_samples[idx].samples[s_idx++] = s2;
+    }
+    slot = digi_samples[idx].wave_slot;
+  }
+
+  if (slot != -1 && num_digi_events < MAX_DIGI_EVENTS) {
+    if (num_digi_events == 0 || digi_events[num_digi_events - 1].frame != frame) {
+      digi_events[num_digi_events].frame = frame;
+      digi_events[num_digi_events].wave_slot = slot;
+      num_digi_events++;
+    }
+  }
+}
+
+void print_digi_summary(void) {
+  if (num_digi_samples == 0) return;
+  printf("# === C64 PCM DIGI SAMPLES ===\n");
+  for (int i = 0; i < num_digi_samples; i++) {
+    printf("# DIGI_SAMPLE %d %u %u\n",
+           digi_samples[i].wave_slot,
+           digi_samples[i].sample_rate,
+           digi_samples[i].length_samples);
+    printf("# DATA");
+    for (unsigned int s = 0; s < digi_samples[i].length_samples; s++) {
+      printf(" %.4f", digi_samples[i].samples[s]);
+    }
+    printf("\n");
+  }
+  printf("# === C64 DIGI EVENTS ===\n");
+  for (int i = 0; i < num_digi_events; i++) {
+    printf("# DIGI_EVENT %d %d\n",
+           digi_events[i].frame,
+           digi_events[i].wave_slot);
+  }
+}
+
 const char *notename[] =
  {"C-0", "C#0", "D-0", "D#0", "E-0", "F-0", "F#0", "G-0", "G#0", "A-0", "A#0", "B-0",
   "C-1", "C#1", "D-1", "D#1", "E-1", "F-1", "F#1", "G-1", "G#1", "A-1", "A#1", "B-1",
@@ -348,6 +436,9 @@ int main(int argc, char **argv)
 
     reset_voice_triggers();
 
+    in_playroutine = 1;
+    current_play_frame = frames;
+
     // Run the playroutine, once per call the tune makes in a frame
     for (call = 0; call < callsperframe; call++)
     {
@@ -368,6 +459,7 @@ int main(int argc, char **argv)
       // initcpu zeroes cpucycles, so the profiling column accumulates here
       framecycles += cpucycles;
     }
+    in_playroutine = 0;
 
     // Get SID parameters from each channel and the filter
     for (c = 0; c < 3; c++)
@@ -552,6 +644,7 @@ int main(int argc, char **argv)
     // Advance to next frame
     frames++;
   }
+  print_digi_summary();
   return 0;
 }
 

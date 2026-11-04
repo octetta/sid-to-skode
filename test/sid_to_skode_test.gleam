@@ -311,4 +311,40 @@ pub fn noise_transition_waveform_test() {
   string.contains(res.skode_text, "w301") |> should.be_true
 }
 
+pub fn digi_sample_extraction_and_conversion_test() {
+  let dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | 0800  A-2 95  11 0DFB 180 | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | 0000 00 Off F |
+|     1 | 0800  A-2 95  11 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | .... .. ... . |
+|     2 | 0800  A-2 95  11 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | .... .. ... . |
+|     3 | 0800  A-2 95  11 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | .... .. ... . |
+# === C64 PCM DIGI SAMPLES ===
+# DIGI_SAMPLE 310 6842 4
+# DATA -0.0667 0.3333 -0.2000 0.5000
+# === C64 DIGI EVENTS ===
+# DIGI_EVENT 2 310
+"
+
+  let assert Ok(song) = dump_parser.parse_dump(dump, "Giana Digi Test")
+  list.length(song.digi_samples) |> should.equal(1)
+  list.length(song.digi_events) |> should.equal(1)
+
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Must contain /D 4096 memory resize and inline float array with /d
+  string.contains(res.skode_text, "/D 4096") |> should.be_true
+  string.contains(res.skode_text, "/d 310,6842") |> should.be_true
+
+  // Must initialize Voice 3 for digi percussion
+  string.contains(res.skode_text, "v3 [Digi Percussion]") |> should.be_true
+
+  // Must trigger Voice 3 at step x2 at exact rate (6842 / 4 = 1710.5 Hz)
+  string.contains(res.skode_text, "[v3 w310,1,1 f1710.500 l1] x2") |> should.be_true
+
+  // Must silence v3 in stop macros
+  string.contains(res.skode_text, "v3 l0") |> should.be_true
+}
+
+
 
