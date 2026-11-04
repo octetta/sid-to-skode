@@ -429,6 +429,67 @@ html, body {
   width: 100%;
 }
 
+.song-header-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.6));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.song-header-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.song-header-icon {
+  font-size: 1.15rem;
+}
+
+.song-header-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.song-header-author {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  font-family: var(--font-sans);
+}
+
+.song-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  font-size: 0.74rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #94a3b8;
+}
+
+.meta-chip-gold {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  font-weight: 700;
+}
+
 .transport-container {
   display: flex;
   flex-direction: column;
@@ -515,6 +576,7 @@ html, body {
   border-radius: 3px;
   outline: none;
   cursor: pointer;
+  touch-action: none;
   transition: all 0.15s ease;
 }
 
@@ -605,6 +667,7 @@ html, body {
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+  touch-action: none;
 }
 
 .pan-range-input::-webkit-slider-thumb {
@@ -842,6 +905,7 @@ html, body {
   margin: 0;
   padding: 0;
   z-index: 5;
+  touch-action: none;
 }
 
 .playback-progress-fill {
@@ -995,6 +1059,25 @@ html, body {
   box-shadow: 0 0 12px rgba(0, 255, 180, 0.35);
 }
 
+.tab-btn-digi {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+}
+
+.tab-btn-digi:hover {
+  border-color: #f59e0b;
+  color: #ffffff;
+  background-color: rgba(245, 158, 11, 0.15);
+}
+
+.tab-btn-digi.active {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  color: #1a1202;
+  border-color: #fbbf24;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+}
+
 .tab-content-panel {
   display: flex;
   flex-direction: column;
@@ -1014,6 +1097,191 @@ html, body {
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+/* Samples Tab Layout & Auditioning */
+.samples-tab-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.samples-tab-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.samples-tab-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.samples-routing-badge {
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.samples-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.sample-audition-card {
+  background: #090f1e;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.sample-audition-card:hover {
+  border-color: rgba(245, 158, 11, 0.7);
+  transform: translateY(-2px);
+}
+
+.sample-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sample-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sample-slot-badge {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.sample-slot-num {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.btn-audition {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: 1px solid #10b981;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+.btn-audition:hover {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.5);
+  transform: scale(1.03);
+}
+
+.btn-audition:active {
+  transform: scale(0.97);
+}
+
+.btn-audition-sm {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-audition-sm:hover {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.btn-audition-sm:active {
+  transform: scale(0.95);
+}
+
+.sample-mini-waveform {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 48px;
+  background: #040810;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  padding: 4px 6px;
+  overflow: hidden;
+}
+
+.sample-wave-bar {
+  flex: 1;
+  min-width: 2px;
+  background: linear-gradient(180deg, #38bdf8, #00ffb4);
+  border-radius: 1px;
+  transition: height 0.1s ease;
+}
+
+.sample-card-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.sample-spec-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+}
+
+.sample-spec-key {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.sample-spec-val {
+  color: #cbd5e1;
 }
 
 .song-info-card {

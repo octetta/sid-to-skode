@@ -359,5 +359,13 @@ pub fn digi_sample_extraction_and_conversion_test() {
   |> should.be_true
 }
 
+pub fn audition_command_formatting_test() {
+  let pan_cmd = converter.build_voice_pan_command(4, 0.25)
+  pan_cmd |> should.equal("v4 p0.25")
+
+  let live_cmd = converter.build_live_stereo_command(StereoHeadphone)
+  live_cmd |> should.equal("v0 p-0.6; v1 p0.6; v2 p0.0")
+}
+
 
 

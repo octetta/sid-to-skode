@@ -208,13 +208,13 @@ export function setMasterVolume(volDb) {
 export function panicEngine() {
   stopPlayback();
   loadedSongScript = null;
-  executeSkredCommand("v0 l0; v1 l0; v2 l0; S-1; Y-1");
+  executeSkredCommand("v0 l0; v1 l0; v2 l0; v3 l0; v4 l0; v5 l0; v6 l0; v7 l0; S-1; Y-1");
 }
 
 export function ejectSong() {
   stopPlayback();
   loadedSongScript = null;
-  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; Y-1;");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; v4 l0; v5 l0; v6 l0; v7 l0; S-1; Y-1;");
 }
 
 function flushCommandQueue() {
@@ -458,13 +458,46 @@ export function stopPlayback() {
   lastReportedStep = -1;
   stopWasmEventPump();
   ensureAudioContext();
-  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
+  executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; v4 l0; v5 l0; v6 l0; v7 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
 }
 
 export function seekToStep(step) {
   const s = Math.max(0, Math.floor(step));
   lastReportedStep = s;
   executeSkredCommand(`y0 zg ${s}; y1 zg ${s}; y2 zg ${s}; y3 zg ${s}; y127 zg ${s};`);
+}
+
+let nextAuditionVoice = 4;
+
+export function auditionSample(slot, script, samplePan = 0.0) {
+  ensureAudioContext();
+  ensureEngineRunning();
+  const M = getWasmModule();
+  if (!M) return;
+
+  // If the script with wavetable definitions has not been loaded into Skred yet, load it now:
+  if (script && loadedSongScript !== script) {
+    if (M.FS) {
+      try { M.FS.writeFile("/song.sk", script); } catch (e) {}
+      try { M.FS.writeFile("song.sk", script); } catch (e) {}
+      executeSkredCommand("[song.sk] /ls");
+    } else {
+      executeSkredCommand(script);
+    }
+    executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+    loadedSongScript = script;
+  }
+
+  // Assign to a free Skred voice (cycling voices 4..7) so we don't interfere with song playback
+  // (Voice 0..2 = SID oscillators 1..3, Voice 3 = song digi percussion)
+  const voice = nextAuditionVoice;
+  nextAuditionVoice = nextAuditionVoice >= 7 ? 4 : nextAuditionVoice + 1;
+
+  const panClamped = Math.max(-1.0, Math.min(1.0, Number(samplePan) || 0.0));
+  const panStr = panClamped.toFixed(2);
+  // Audition at unity sample playback frequency (f440) with fast attack/decay
+  const cmd = `v${voice} vt a-8 f440 t0.001,0.001,1.0,0.001 p${panStr}; v${voice} w${slot},1,1 f440 l1;`;
+  executeSkredCommand(cmd);
 }
 
 export function setDacCrunch(enabled) {

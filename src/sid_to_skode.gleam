@@ -18,12 +18,12 @@ import lustre/event
 import sid_to_skode/converter
 import sid_to_skode/dump_parser
 import sid_to_skode/types.{
-  type DumpSong, type FilterFrame, type Model, type Msg, type SidFrame,
-  type VoiceFrame, ConversionFailed, CopySkodeClicked, DownloadSkodeClicked,
-  DumpTextReady, EngineStatusChanged, FileDropped, FilterFrame, LoadDemo,
-  MasterVolumeChanged, Model, PanicClicked, PauseClicked, PlayClicked,
-  PlaybackEnded, PlaybackStepChanged, RandomSidClicked, ResetClicked,
-  ResumeClicked, SeekStep, SidFrame, StereoCustom, StereoHeadphone,
+  type DigiSample, type DumpSong, type FilterFrame, type Model, type Msg,
+  type SidFrame, type VoiceFrame, AuditionSample, ConversionFailed,
+  CopySkodeClicked, DownloadSkodeClicked, DumpTextReady, EngineStatusChanged,
+  FileDropped, FilterFrame, LoadDemo, MasterVolumeChanged, Model, PanicClicked,
+  PauseClicked, PlayClicked, PlaybackEnded, PlaybackStepChanged, RandomSidClicked,
+  ResetClicked, ResumeClicked, SeekStep, SidFrame, StereoCustom, StereoHeadphone,
   StereoModeChanged, StereoMono, StereoWide, StopClicked, TabSelected,
   ToggleDacCrunch, ToggleReplClicked, VoiceFrame, VoicePanChanged,
 }
@@ -101,9 +101,16 @@ fn js_seek_to_step(step: Int) -> Nil
 @external(javascript, "./skred_ffi.mjs", "setDacCrunch")
 fn js_set_dac_crunch(enabled: Bool) -> Nil
 
+@external(javascript, "./skred_ffi.mjs", "auditionSample")
+fn js_audition_sample(slot: Int, script: String, pan: Float) -> Nil
+
 // ---------------------------------------------------------------------------
 // Lustre Effects
 // ---------------------------------------------------------------------------
+
+fn audition_sample_effect(slot: Int, script: String, pan: Float) -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_audition_sample(slot, script, pan) })
+}
 
 fn seek_effect(step: Int) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_seek_to_step(step) })
@@ -255,6 +262,25 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   #(model, effects)
 }
 
+fn refresh_conversion_if_needed(model: Model) -> Model {
+  case model.active_song {
+    Some(song) -> {
+      case
+        converter.convert_song_full(
+          song,
+          model.stereo_mode,
+          model.dac_crunch,
+          model.sample_pan,
+        )
+      {
+        Ok(conv) -> Model(..model, conversion: Some(conv))
+        Error(_) -> model
+      }
+    }
+    None -> model
+  }
+}
+
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     EngineStatusChanged(ready) -> {
@@ -362,12 +388,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     PlayClicked -> {
-      case model.conversion {
+      let current_model = case model.is_playing {
+        False -> refresh_conversion_if_needed(model)
+        True -> model
+      }
+      case current_model.conversion {
         Some(conv) -> {
-          let step = model.current_step
+          let step = current_model.current_step
           #(
             Model(
-              ..model,
+              ..current_model,
               is_playing: True,
               is_paused: False,
               status_text: "Playing in Skred WASM (50 Hz step clock)...",
@@ -375,7 +405,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
             play_effect(conv.skode_text, conv.total_steps, step),
           )
         }
-        None -> #(model, effect.none())
+        None -> #(current_model, effect.none())
       }
     }
 
@@ -452,25 +482,27 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     DownloadSkodeClicked -> {
-      case model.conversion, model.active_song {
+      let current_model = refresh_conversion_if_needed(model)
+      case current_model.conversion, current_model.active_song {
         Some(conv), Some(song) -> {
           let filename = clean_skode_filename(song.title)
           #(
-            Model(..model, status_text: "Downloading " <> filename <> "..."),
+            Model(..current_model, status_text: "Downloading " <> filename <> "..."),
             download_file_effect(filename, conv.skode_text),
           )
         }
-        _, _ -> #(model, effect.none())
+        _, _ -> #(current_model, effect.none())
       }
     }
 
     CopySkodeClicked -> {
-      case model.conversion {
+      let current_model = refresh_conversion_if_needed(model)
+      case current_model.conversion {
         Some(conv) -> #(
-          Model(..model, status_text: "Skode script copied to clipboard!"),
+          Model(..current_model, status_text: "Skode script copied to clipboard!"),
           copy_clipboard_effect(conv.skode_text),
         )
-        None -> #(model, effect.none())
+        None -> #(current_model, effect.none())
       }
     }
 
@@ -498,7 +530,26 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     TabSelected(tab) -> {
-      #(Model(..model, active_tab: tab), effect.none())
+      let current_model = case tab {
+        "skode" -> refresh_conversion_if_needed(model)
+        _ -> model
+      }
+      #(Model(..current_model, active_tab: tab), effect.none())
+    }
+
+    AuditionSample(slot) -> {
+      let script_text = case model.conversion {
+        Some(conv) -> conv.skode_text
+        None -> ""
+      }
+      let status =
+        "Auditioning digi sample w"
+        <> int.to_string(slot)
+        <> " on free Skred voice"
+      #(
+        Model(..model, status_text: status),
+        audition_sample_effect(slot, script_text, model.sample_pan),
+      )
     }
 
     LoadDemo(url, filename, title, author) -> {
@@ -551,28 +602,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         StereoMono -> "Stereo pan preset: 📻 Authentic Mono (All centered)"
         StereoCustom(_, _, _) -> "Custom stereo voice panning active"
       }
-      let re_conv = case model.active_song {
-        Some(song) -> {
-          case
-            converter.convert_song_full(
-              song,
-              new_mode,
-              model.dac_crunch,
-              model.sample_pan,
-            )
-          {
-            Ok(conv) -> Some(conv)
-            Error(_) -> model.conversion
-          }
-        }
-        None -> model.conversion
-      }
       #(
         Model(
           ..model,
           stereo_mode: new_mode,
           voice_pan: #(p0, p1, p2),
-          conversion: re_conv,
           status_text: mode_desc,
         ),
         send_command_effect(live_cmd),
@@ -590,27 +624,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
             <> " ("
             <> converter.format_float(clamped, 2)
             <> ")"
-          let re_conv = case model.active_song {
-            Some(song) -> {
-              case
-                converter.convert_song_full(
-                  song,
-                  model.stereo_mode,
-                  model.dac_crunch,
-                  clamped,
-                )
-              {
-                Ok(conv) -> Some(conv)
-                Error(_) -> model.conversion
-              }
-            }
-            None -> model.conversion
-          }
           #(
             Model(
               ..model,
               sample_pan: clamped,
-              conversion: re_conv,
               status_text: status,
             ),
             send_command_effect(cmd),
@@ -634,28 +651,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
             <> " ("
             <> converter.format_float(clamped, 2)
             <> ")"
-          let re_conv = case model.active_song {
-            Some(song) -> {
-              case
-                converter.convert_song_full(
-                  song,
-                  next_mode,
-                  model.dac_crunch,
-                  model.sample_pan,
-                )
-              {
-                Ok(conv) -> Some(conv)
-                Error(_) -> model.conversion
-              }
-            }
-            None -> model.conversion
-          }
           #(
             Model(
               ..model,
               voice_pan: next_pans,
               stereo_mode: next_mode,
-              conversion: re_conv,
               status_text: status,
             ),
             send_command_effect(cmd),
@@ -685,27 +685,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         True -> "🎛️ MOS 6581 DAC Crunch: ON (bc 6 quantized)"
         False -> "🎛️ MOS 6581 DAC Crunch: OFF (clean 24-bit DSP)"
       }
-      let re_conv = case model.active_song {
-        Some(song) -> {
-          case
-            converter.convert_song_full(
-              song,
-              model.stereo_mode,
-              next_dac,
-              model.sample_pan,
-            )
-          {
-            Ok(conv) -> Some(conv)
-            Error(_) -> model.conversion
-          }
-        }
-        None -> model.conversion
-      }
       #(
         Model(
           ..model,
           dac_crunch: next_dac,
-          conversion: re_conv,
           status_text: status,
         ),
         set_dac_crunch_effect(next_dac),
@@ -1092,13 +1075,51 @@ fn feature_card(title: String, desc: String) -> Element(Msg) {
 fn view_dashboard(model: Model, song: DumpSong) -> Element(Msg) {
   html.div([class("dashboard-container")], [
     view_transport_bar(model, song),
-    view_metadata_bar(model, song),
-    view_tabs_navigation(model),
+    view_tabs_navigation(model, song),
     view_tab_content(model, song),
   ])
 }
 
-fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
+fn view_transport_bar(model: Model, song: DumpSong) -> Element(Msg) {
+  let clean_title = case string.trim(song.title) {
+    "" -> "(Untitled)"
+    t -> t
+  }
+  let clean_author = case string.trim(song.author) {
+    "" -> "Unknown"
+    a -> a
+  }
+  let duration_str = case model.conversion {
+    Some(conv) -> converter.format_duration(conv.duration_seconds)
+    None -> "--:--"
+  }
+  let song_strip =
+    html.div([class("song-header-strip")], [
+      html.div([class("song-header-main")], [
+        html.span([class("song-header-icon")], [text("🎵")]),
+        html.span([class("song-header-title")], [text(clean_title)]),
+        html.span([class("song-header-author")], [text("by " <> clean_author)]),
+      ]),
+      html.div([class("song-header-meta")], [
+        html.span([class("meta-chip mono")], [
+          text(int.to_string(song.frame_count) <> " frames"),
+        ]),
+        html.span([class("meta-chip mono")], [text("PAL 50Hz")]),
+        html.span([class("meta-chip mono")], [text(duration_str)]),
+        case list.is_empty(song.digi_samples) {
+          True -> html.span([], [])
+          False ->
+            html.span([class("meta-chip meta-chip-gold mono")], [
+              text(
+                "🥁 "
+                <> int.to_string(list.length(song.digi_samples))
+                <> " PCM Digis",
+              ),
+            ])
+        },
+      ]),
+    ])
+
   let play_pause_btn = case model.is_playing {
     False ->
       html.button(
@@ -1260,6 +1281,7 @@ fn view_transport_bar(model: Model, _song: DumpSong) -> Element(Msg) {
   }
 
   html.div([class("transport-container")], [
+    song_strip,
     html.div([class("transport-bar")], [
       html.div([class("transport-buttons")], [
         play_pause_btn,
@@ -1574,61 +1596,102 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
   )
 }
 
-fn view_tabs_navigation(model: Model) -> Element(Msg) {
-  html.nav([class("tabs-nav")], [
-    html.button(
+fn view_tabs_navigation(model: Model, song: DumpSong) -> Element(Msg) {
+  let has_digi = !list.is_empty(song.digi_samples)
+  let digi_tab = case has_digi {
+    True -> [
+      html.button(
+        [
+          class(case model.active_tab {
+            "samples" -> "tab-btn active tab-btn-digi"
+            _ -> "tab-btn tab-btn-digi"
+          }),
+          event.on_click(TabSelected("samples")),
+          attribute.title(
+            "Audition Captured C64 PCM Digi Samples ("
+            <> int.to_string(list.length(song.digi_samples))
+            <> ") on Free Skred Voices",
+          ),
+        ],
+        [
+          text(
+            "🥁 Digi Samples ("
+            <> int.to_string(list.length(song.digi_samples))
+            <> ")",
+          ),
+        ],
+      ),
+    ]
+    False -> []
+  }
+
+  html.nav(
+    [class("tabs-nav")],
+    list.flatten([
       [
-        class(case model.active_tab {
-          "voices" -> "tab-btn active"
-          _ -> "tab-btn"
-        }),
-        event.on_click(TabSelected("voices")),
-        attribute.title("Live SID Oscillators, ADSR Envelopes, Waveforms & Biquad Filter"),
+        html.button(
+          [
+            class(case model.active_tab {
+              "voices" -> "tab-btn active"
+              _ -> "tab-btn"
+            }),
+            event.on_click(TabSelected("voices")),
+            attribute.title(
+              "Live SID Oscillators, ADSR Envelopes, Waveforms & Biquad Filter",
+            ),
+          ],
+          [text("🎛️ SID Registers & Voices")],
+        ),
       ],
-      [text("🎛️ SID Voices & Filter")],
-    ),
-    html.button(
+      digi_tab,
       [
-        class(case model.active_tab {
-          "info" -> "tab-btn active"
-          _ -> "tab-btn"
-        }),
-        event.on_click(TabSelected("info")),
-        attribute.title("Tune Metadata, Authorship & Synthesis Architecture"),
+        html.button(
+          [
+            class(case model.active_tab {
+              "info" -> "tab-btn active"
+              _ -> "tab-btn"
+            }),
+            event.on_click(TabSelected("info")),
+            attribute.title("Tune Metadata, Authorship & Synthesis Architecture"),
+          ],
+          [text("ℹ️ Tune Info")],
+        ),
+        html.button(
+          [
+            class(case model.active_tab {
+              "skode" -> "tab-btn active"
+              _ -> "tab-btn"
+            }),
+            event.on_click(TabSelected("skode")),
+            attribute.title("Compiled Skode (.sk) Source Script"),
+          ],
+          [text("📜 Skode Script (.sk)")],
+        ),
+        html.button(
+          [
+            class(case model.active_tab {
+              "dump" -> "tab-btn active"
+              _ -> "tab-btn"
+            }),
+            event.on_click(TabSelected("dump")),
+            attribute.title("Raw 50Hz SID Register Dump Text"),
+          ],
+          [text("📑 Raw SID Dump")],
+        ),
       ],
-      [text("ℹ️ Tune Info")],
-    ),
-    html.button(
-      [
-        class(case model.active_tab {
-          "skode" -> "tab-btn active"
-          _ -> "tab-btn"
-        }),
-        event.on_click(TabSelected("skode")),
-      ],
-      [text("📜 Skode Script (.sk)")],
-    ),
-    html.button(
-      [
-        class(case model.active_tab {
-          "dump" -> "tab-btn active"
-          _ -> "tab-btn"
-        }),
-        event.on_click(TabSelected("dump")),
-      ],
-      [text("📑 Raw SID Dump")],
-    ),
-  ])
+    ]),
+  )
 }
 
 fn view_tab_content(model: Model, song: DumpSong) -> Element(Msg) {
   html.div([class("tab-content-panel")], [
     case model.active_tab {
-      "info" -> view_tab_info(model, song)
       "voices" -> view_tab_voices(model, song)
+      "samples" -> view_tab_samples(model, song)
+      "info" -> view_tab_info(model, song)
       "skode" -> view_tab_skode(model)
       "dump" -> view_tab_dump(model)
-      _ -> view_tab_info(model, song)
+      _ -> view_tab_voices(model, song)
     },
   ])
 }
@@ -1689,7 +1752,7 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
         ]),
         html.p([class("card-body-text")], [
           text(
-            "This Commodore 64 tune features 4-bit nibble PCM sample playback (percussion / speech) driven by custom 6502 playroutines. During conversion, sid-to-skode detected zero-page sample vector updates ($04 sample pointer and $02 end boundary) and automatically extracted the raw sample bytes from C64 RAM. The nibbles are decoded, DC-centered, normalized to bipolar floating-point, and compiled directly as inline Skode wavetables (( ... ) /d <slot>,<rate>) inside the header. No external audio files are required — the generated script is 100% self-contained and playable anywhere Skred runs!",
+            "This Commodore 64 tune features 4-bit nibble PCM sample playback (percussion / speech) driven by custom 6502 playroutines. During conversion, sid-to-skode detected zero-page sample vector updates ($04 sample pointer and $02 end boundary) and automatically extracted the raw sample bytes from C64 RAM. The nibbles are decoded, DC-centered, normalized to bipolar floating-point, and compiled directly as inline Skode wavetables (( ... ) /d <slot>,<rate>) inside the header. You can audition each sample below — preview triggers run on free Skred voices (v4–v7) without affecting the song!",
           ),
         ]),
         html.div([class("digi-samples-table-wrap")], [
@@ -1702,6 +1765,7 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
                 html.th([], [text("Sample Rate")]),
                 html.th([], [text("Duration")]),
                 html.th([], [text("Song Hits")]),
+                html.th([], [text("Audition")]),
               ]),
             ]),
             html.tbody(
@@ -1730,6 +1794,20 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
                   ]),
                   html.td([class("highlight-green")], [
                     text(int.to_string(trigger_count) <> " hits"),
+                  ]),
+                  html.td([], [
+                    html.button(
+                      [
+                        class("btn btn-sm btn-audition-sm"),
+                        event.on_click(AuditionSample(s.slot)),
+                        attribute.title(
+                          "Audition w"
+                          <> int.to_string(s.slot)
+                          <> " on free Skred voice",
+                        ),
+                      ],
+                      [text("▶ Audition")],
+                    ),
                   ]),
                 ])
               }),
@@ -1780,8 +1858,137 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
 
   html.div(
     [class("info-tab-layout")],
-    list.flatten([archive_card, digi_card, base_cards]),
+    list.flatten([
+      [view_metadata_bar(model, song)],
+      archive_card,
+      digi_card,
+      base_cards,
+    ]),
   )
+}
+
+fn sample_evenly(items: List(Float), count: Int) -> List(Float) {
+  let len = list.length(items)
+  case len <= count {
+    True -> items
+    False -> {
+      let step = int.max(1, len / count)
+      list.index_map(items, fn(x, i) { #(i, x) })
+      |> list.filter(fn(pair) { pair.0 % step == 0 })
+      |> list.take(count)
+      |> list.map(fn(pair) { pair.1 })
+    }
+  }
+}
+
+fn view_mini_waveform(samples: List(Float)) -> Element(Msg) {
+  let downsampled = sample_evenly(samples, 32)
+  let bars =
+    list.map(downsampled, fn(v) {
+      let abs_val = float.min(1.0, float.max(0.1, float.absolute_value(v)))
+      let pct = converter.format_float(abs_val *. 100.0, 0) <> "%"
+      html.div([class("sample-wave-bar"), attribute.style("height", pct)], [])
+    })
+  html.div([class("sample-mini-waveform")], bars)
+}
+
+fn view_tab_samples(_model: Model, song: DumpSong) -> Element(Msg) {
+  let sample_count = list.length(song.digi_samples)
+  html.div([class("samples-tab-layout")], [
+    html.div([class("song-info-card digi-info-card")], [
+      html.div([class("samples-tab-header-row")], [
+        html.div([class("samples-tab-title-group")], [
+          html.h3([class("card-title highlight-gold")], [
+            text(
+              "🥁 Captured C64 PCM Digi Samples ("
+              <> int.to_string(sample_count)
+              <> ")",
+            ),
+          ]),
+          html.span([class("samples-routing-badge")], [
+            text("⚡ Free Voice Routing (v4–v7) · Isolated from Song"),
+          ]),
+        ]),
+      ]),
+      html.p([class("card-body-text")], [
+        text(
+          "This Commodore 64 tune features 4-bit nibble PCM sample playback (percussion / speech) driven by custom 6502 playroutines. During conversion, sid-to-skode detected zero-page sample vector updates ($04 sample pointer and $02 end boundary) and automatically extracted the raw sample bytes from C64 RAM. The nibbles are decoded, DC-centered, normalized to bipolar floating-point, and compiled directly as inline Skode wavetables (( ... ) /d <slot>,<rate>) inside the header. You can audition them with the buttons below — preview triggers run on free Skred voices (v4–v7) without affecting the song playback!",
+        ),
+      ]),
+    ]),
+    html.div(
+      [class("samples-cards-grid")],
+      list.map(song.digi_samples, fn(s) { view_sample_card(s, song) }),
+    ),
+  ])
+}
+
+fn view_sample_card(s: DigiSample, song: DumpSong) -> Element(Msg) {
+  let trigger_count =
+    list.filter(song.digi_events, fn(ev) { ev.slot == s.slot })
+    |> list.length
+  let duration_ms =
+    int.to_float(s.length)
+    *. 1000.0
+    /. s.rate
+
+  html.div([class("sample-audition-card")], [
+    html.div([class("sample-card-top")], [
+      html.div([class("sample-card-identity")], [
+        html.span([class("sample-slot-badge highlight-yellow")], [
+          text("w" <> int.to_string(s.slot)),
+        ]),
+        html.span([class("sample-slot-num mono")], [
+          text("Slot #" <> int.to_string(s.slot)),
+        ]),
+      ]),
+      html.button(
+        [
+          class("btn btn-success btn-audition"),
+          event.on_click(AuditionSample(s.slot)),
+          attribute.title(
+            "Audition w"
+            <> int.to_string(s.slot)
+            <> " on free Skred voice (no song interference)",
+          ),
+        ],
+        [text("▶ Audition w" <> int.to_string(s.slot))],
+      ),
+    ]),
+    view_mini_waveform(s.samples),
+    html.div([class("sample-card-specs")], [
+      html.div([class("sample-spec-item")], [
+        html.span([class("sample-spec-key")], [text("LENGTH")]),
+        html.span([class("sample-spec-val mono")], [
+          text(int.to_string(s.length) <> " samples"),
+        ]),
+      ]),
+      html.div([class("sample-spec-item")], [
+        html.span([class("sample-spec-key")], [text("SAMPLE RATE")]),
+        html.span([class("sample-spec-val mono")], [
+          text(converter.format_float(s.rate, 0) <> " Hz"),
+        ]),
+      ]),
+      html.div([class("sample-spec-item")], [
+        html.span([class("sample-spec-key")], [text("DURATION")]),
+        html.span([class("sample-spec-val mono")], [
+          text(converter.format_float(duration_ms, 1) <> " ms"),
+        ]),
+      ]),
+      html.div([class("sample-spec-item")], [
+        html.span([class("sample-spec-key")], [text("SONG HITS")]),
+        html.span([class("sample-spec-val mono highlight-green")], [
+          text(int.to_string(trigger_count) <> " hits"),
+        ]),
+      ]),
+      html.div([class("sample-spec-item")], [
+        html.span([class("sample-spec-key")], [text("ROUTING")]),
+        html.span([class("sample-spec-val mono highlight-cyan")], [
+          text("Free Voice v4–v7"),
+        ]),
+      ]),
+    ]),
+  ])
 }
 
 fn info_row(label: String, val: String) -> Element(Msg) {

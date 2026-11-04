@@ -177,4 +177,5 @@ pub type Msg {
   ToggleReplClicked
   ToggleDacCrunch
   SeekStep(Int)
+  AuditionSample(Int)
 }
