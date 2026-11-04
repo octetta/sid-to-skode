@@ -814,10 +814,45 @@ pub type DemoTune {
 const featured_demos: List(DemoTune) = [
   DemoTune(
     "🥁",
-    "Great Giana Sisters (PCM Digi)",
+    "Great Giana Sisters (Digi)",
     "Chris Hülsbeck",
     "great_giana_sisters.sid",
     "demos/great_giana_sisters.sid",
+  ),
+  DemoTune(
+    "🎤",
+    "To Be On Top (Digi)",
+    "Chris Hülsbeck",
+    "to_be_on_top.sid",
+    "demos/to_be_on_top.sid",
+  ),
+  DemoTune(
+    "🏎️",
+    "Turbo Outrun (Digi)",
+    "Jeroen Tel",
+    "turbo_outrun.sid",
+    "demos/turbo_outrun.sid",
+  ),
+  DemoTune(
+    "🧱",
+    "Arkanoid (Digi)",
+    "Martin Galway",
+    "arkanoid.sid",
+    "demos/arkanoid.sid",
+  ),
+  DemoTune(
+    "👻",
+    "Ghostbusters II",
+    "David Whittaker",
+    "ghostbusters_ii.sid",
+    "demos/ghostbusters_ii.sid",
+  ),
+  DemoTune(
+    "🎖️",
+    "Commando",
+    "Rob Hubbard",
+    "commando.sid",
+    "demos/commando.sid",
   ),
   DemoTune(
     "🛩️",
@@ -827,7 +862,7 @@ const featured_demos: List(DemoTune) = [
     "MUSICIANS/W/Whittaker_David/Glider_Rider.sid",
   ),
   DemoTune(
-    "🏎️",
+    "⚡",
     "Eliminator",
     "Jeroen Tel",
     "eliminator.sid",

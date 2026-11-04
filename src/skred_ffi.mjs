@@ -866,6 +866,14 @@ export const HVSC_CATALOG = [
     duration: 210,
     source: "Rainbow Arts (1988)",
   },
+  {
+    title: "To Be on Top",
+    author: "Chris Hülsbeck",
+    filename: "to_be_on_top.sid",
+    hvscPath: "MUSICIANS/H/Huelsbeck_Chris/To_be_on_Top.sid",
+    duration: 180,
+    source: "Rainbow Arts (1987)",
+  },
 
   // Matt Gray
   {
@@ -970,6 +978,24 @@ export const HVSC_CATALOG = [
     duration: 220,
     source: "Terminal Software (1984)",
   },
+  {
+    title: "Ghostbusters II",
+    author: "David Whittaker",
+    filename: "ghostbusters_ii.sid",
+    hvscPath: "MUSICIANS/W/Whittaker_David/Ghostbusters_II.sid",
+    duration: 180,
+    source: "Activision (1989)",
+  },
+
+  // Russell Lieblich
+  {
+    title: "Ghostbusters",
+    author: "Russell Lieblich",
+    filename: "ghostbusters.sid",
+    hvscPath: "MUSICIANS/L/Lieblich_Russell/Ghostbusters.sid",
+    duration: 180,
+    source: "Activision (1984)",
+  },
 
   // Johannes Bjerregaard & Reyn Ouwehand
   {
@@ -1073,7 +1099,7 @@ export async function loadDemoSid(
     let buf = null;
     const candidates = [];
 
-    if (cleanUrl.startsWith("demos/") || cleanUrl.includes("great_giana_sisters") || cleanUrl.includes("commando")) {
+    if (cleanUrl.startsWith("demos/") || filename) {
       const demoFile = cleanUrl.startsWith("demos/") ? cleanUrl : "demos/" + filename;
       const fallbackDemoUrl =
         typeof window !== "undefined"
