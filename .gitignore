@@ -7,3 +7,5 @@ demos/*.sk
 .DS_Store
 *history.txt
 mini-skred-history.txt
+c_src/siddump/siddump
+

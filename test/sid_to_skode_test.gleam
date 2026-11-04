@@ -264,3 +264,31 @@ pub fn combo_waveforms_priority_test() {
   string.contains(res.skode_text, "w15") |> should.be_true
   string.contains(res.skode_text, "w16") |> should.be_true
 }
+
+pub fn repeated_pitch_gate_retrigger_test() {
+  // Voice 2 plays C-2 on frame 0, sustains on frame 1, and retriggers C-2 on frame 2
+  let dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | ....  ... ..  .. .... ... | 0458  C-2 98  41 0800 388 | ....  ... ..  .. .... ... | .... .. ... . |
+|     1 | ....  ... ..  .. .... ... | ....  ... ..  .. .... 3B0 | ....  ... ..  .. .... ... | .... .. ... . |
+|     2 | ....  ... ..  .. .... ... | 0458  C-2 98  41 0800 400 | ....  ... ..  .. .... ... | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(dump, "Retrigger Bass")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Voice 2 (Track 1) must emit l1 attack at both x0 and x2
+  let lines = string.split(res.skode_text, "\n")
+  let has_attack_at_0 =
+    list.any(lines, fn(line) {
+      string.contains(line, "x0") && string.contains(line, "l1")
+    })
+  let has_attack_at_2 =
+    list.any(lines, fn(line) {
+      string.contains(line, "x2") && string.contains(line, "l1")
+    })
+
+  has_attack_at_0 |> should.be_true
+  has_attack_at_2 |> should.be_true
+}
+

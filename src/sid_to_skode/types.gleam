@@ -43,6 +43,7 @@ pub type VoiceFrame {
     wave_changed: Bool,
     adsr_changed: Bool,
     pulse_changed: Bool,
+    gate_triggered: Bool,
   )
 }
 

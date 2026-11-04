@@ -184,25 +184,30 @@ fn generate_voice_step_tokens(
   let tokens = []
 
   // Waveform changed
-  let #(tokens, next_wave) = case vf.waveform_byte != tracker.last_wave {
+  let wave_changed = vf.waveform_byte != tracker.last_wave
+  let #(tokens, next_wave) = case wave_changed {
     True -> #([wave_opcode(vf.waveform_byte), ..tokens], vf.waveform_byte)
     False -> #(tokens, tracker.last_wave)
   }
 
-  // Pulse width changed (for pulse wave w1)
-  let is_pulse = int.bitwise_and(vf.waveform_byte, 0x40) != 0
-  let #(tokens, next_pulse) = case
-    is_pulse && vf.pulse_width != tracker.last_pulse
-  {
-    True -> #(
-      ["c1," <> format_float(pulse_to_cz(vf.pulse_width), 3), ..tokens],
-      vf.pulse_width,
-    )
-    False -> #(tokens, tracker.last_pulse)
+  // Frequency and Gate transitions
+  let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
+  let gate_turned_on =
+    { { vf.gate && !tracker.last_gate } || vf.gate_triggered } && vf.freq > 0
+  let gate_turned_off = !vf.gate && tracker.last_gate
+
+  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
+  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
+    True -> {
+      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
+      #([f_str, ..tokens], vf.freq)
+    }
+    False -> #(tokens, tracker.last_freq)
   }
 
   // ADSR envelope changed
   let adsr_changed = vf.adsr != tracker.last_adsr
+  let next_ring = vf.ring_mod
   let #(tokens, next_adsr) = case adsr_changed {
     True -> {
       let a_sec = lookup_table(sid_attack_table, vf.attack, 0.004)
@@ -223,48 +228,53 @@ fn generate_voice_step_tokens(
     False -> #(tokens, tracker.last_adsr)
   }
 
-  // Ring modulation:
-  // SID ring modulation XORs phase accumulator MSBs (MSB1 ^ MSB3), which affects only the triangle
-  // wave and continues oscillating even when the modulator voice has zero volume / gate off.
-  // In Skred's C DSP engine, 'XM' is 4-quadrant PCM sample multiplication (f *= sv.sample[mod]).
-  // Emitting 'XM' when the modulator is silent mutes the voice to 0.0, destroying melodic tunes
-  // like Commando where Voice 1 rapidly multiplexes between lead notes and drum noise.
-  // We keep track of ring_mod in VoiceTracker but do not emit destructive audio-multiplication XM.
-  let next_ring = vf.ring_mod
-
-  // Frequency and Gate transitions
-  let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
-  let gate_turned_on = vf.gate && !tracker.last_gate && vf.freq > 0
-  let gate_turned_off = !vf.gate && tracker.last_gate
-
-  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
-  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
-    True -> {
-      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
-      #([f_str, ..tokens], vf.freq)
-    }
-    False -> #(tokens, tracker.last_freq)
-  }
-
   // Gate and Voice Attack events:
   // In Skred, 'l1' (velocity 1) attacks the voice envelope.
   // We emit 'l1' when:
   // 1. Gate turns on with valid frequency (note-on).
   // 2. Gate is held active, but ADSR parameters change (e.g. percussion hits).
-  // 3. Gate is held active, but pitch changes after sustain has reached 0.
-  // 4. Gate is held active, but pitch changes after being held (staccato re-attack).
-  // When gate turns off and voice is not attacking, we emit 'l0' (note-off/release).
-  // NOTE: 'vt' is voice-text-set and is IMMEDIATE-ONLY; never compile 'vt' into pattern steps!
+  // 3. Gate is held active, but pitch changes by a melodic step (>= 6.25%, ~1 semitone).
+  // 4. Gate is held active, but pitch changes after being held stably (staccato re-attack).
+  // For continuous micro-slides (vibrato and portamento glides < 6.25% per 20ms frame),
+  // we do NOT re-attack, allowing the pitch to glide smoothly without clicking transients.
+  let is_melodic_jump = case tracker.last_freq > 0 {
+    True ->
+      int.absolute_value(vf.freq - tracker.last_freq) * 16 >= tracker.last_freq
+    False -> True
+  }
   let should_attack =
     gate_turned_on
     || { vf.gate && adsr_changed && vf.freq > 0 }
-    || { vf.gate && freq_changed && tracker.frames_held >= 2 }
-    || { vf.gate && freq_changed && vf.sustain == 0 }
+    || { vf.gate && freq_changed && is_melodic_jump }
+    || { vf.gate && freq_changed && tracker.frames_held >= 4 }
 
   let tokens = case should_attack, gate_turned_off {
     True, _ -> ["l1", ..tokens]
     False, True -> ["l0", ..tokens]
     False, False -> tokens
+  }
+
+  // Pulse width (c1, amount):
+  // CZ phase distortion warps the oscillator phase table. Modulating CZ amount mid-note on every 20ms
+  // frame introduces instantaneous phase discontinuities (50Hz zipper noise and clicks).
+  // We emit 'c1' on note attacks, gate-ons, waveform changes, or significant pulse shifts (>= 512 / 12.5%),
+  // ensuring each note has its accurate pulse timbre while preserving pristine phase continuity.
+  let is_pulse = int.bitwise_and(vf.waveform_byte, 0x40) != 0
+  let pulse_diff = int.absolute_value(vf.pulse_width - tracker.last_pulse)
+  let should_emit_pulse =
+    is_pulse
+    && {
+      gate_turned_on
+      || should_attack
+      || wave_changed
+      || pulse_diff >= 512
+    }
+  let #(tokens, next_pulse) = case should_emit_pulse {
+    True -> #(
+      ["c1," <> format_float(pulse_to_cz(vf.pulse_width), 3), ..tokens],
+      vf.pulse_width,
+    )
+    False -> #(tokens, tracker.last_pulse)
   }
 
   let next_frames_held = case freq_changed {

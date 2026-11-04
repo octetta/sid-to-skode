@@ -753,81 +753,18 @@ pub type DemoTune {
 
 const featured_demos: List(DemoTune) = [
   DemoTune(
-    "🎖️",
-    "Commando",
-    "Rob Hubbard",
-    "commando.sid",
-    "MUSICIANS/H/Hubbard_Rob/Commando.sid",
+    "🛩️",
+    "Glider Rider",
+    "David Whittaker",
+    "glider_rider.sid",
+    "MUSICIANS/W/Whittaker_David/Glider_Rider.sid",
   ),
   DemoTune(
-    "🏃",
-    "Monty on the Run",
-    "Rob Hubbard",
-    "monty_on_the_run.sid",
-    "MUSICIANS/H/Hubbard_Rob/Monty_on_the_Run.sid",
-  ),
-  DemoTune(
-    "🚀",
-    "Sanxion",
-    "Rob Hubbard",
-    "sanxion.sid",
-    "MUSICIANS/H/Hubbard_Rob/Sanxion.sid",
-  ),
-  DemoTune(
-    "🔺",
-    "Delta",
-    "Rob Hubbard",
-    "delta.sid",
-    "MUSICIANS/H/Hubbard_Rob/Delta.sid",
-  ),
-  DemoTune(
-    "🥋",
-    "Int. Karate",
-    "Rob Hubbard",
-    "international_karate.sid",
-    "MUSICIANS/H/Hubbard_Rob/International_Karate.sid",
-  ),
-  DemoTune(
-    "🍰",
-    "Comic Bakery",
-    "Martin Galway",
-    "comic_bakery.sid",
-    "MUSICIANS/G/Galway_Martin/Comic_Bakery.sid",
-  ),
-  DemoTune(
-    "🧱",
-    "Arkanoid",
-    "Martin Galway",
-    "arkanoid.sid",
-    "MUSICIANS/G/Galway_Martin/Arkanoid.sid",
-  ),
-  DemoTune(
-    "🔮",
-    "Wizball",
-    "Martin Galway",
-    "wizball.sid",
-    "MUSICIANS/G/Galway_Martin/Wizball.sid",
-  ),
-  DemoTune(
-    "🤖",
-    "Cybernoid",
+    "🏎️",
+    "Eliminator",
     "Jeroen Tel",
-    "cybernoid.sid",
-    "MUSICIANS/T/Tel_Jeroen/Cybernoid.sid",
-  ),
-  DemoTune(
-    "🍄",
-    "Giana Sisters",
-    "Chris Hülsbeck",
-    "great_giana_sisters.sid",
-    "MUSICIANS/H/Huelsbeck_Chris/Great_Giana_Sisters.sid",
-  ),
-  DemoTune(
-    "🥷",
-    "Last Ninja 2",
-    "Matt Gray",
-    "last_ninja_2.sid",
-    "MUSICIANS/G/Gray_Matt/Last_Ninja_2.sid",
+    "eliminator.sid",
+    "MUSICIANS/T/Tel_Jeroen/Eliminator.sid",
   ),
 ]
 
@@ -1855,6 +1792,7 @@ fn default_voice_frame() -> VoiceFrame {
     wave_changed: False,
     adsr_changed: False,
     pulse_changed: False,
+    gate_triggered: False,
   )
 }
 

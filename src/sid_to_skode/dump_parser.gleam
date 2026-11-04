@@ -39,6 +39,7 @@ pub fn default_voice() -> VoiceFrame {
     wave_changed: False,
     adsr_changed: False,
     pulse_changed: False,
+    gate_triggered: False,
   )
 }
 
@@ -136,6 +137,7 @@ fn parse_voice_cell(raw: String, prev: VoiceFrame) -> VoiceFrame {
     False -> parse_hex(pulse_chunk, prev.pulse_width)
   }
   let pulse_changed = !pulse_is_dot && pulse != prev.pulse_width
+  let gate_triggered = !wave_is_dot && gate
 
   VoiceFrame(
     freq: freq,
@@ -156,6 +158,7 @@ fn parse_voice_cell(raw: String, prev: VoiceFrame) -> VoiceFrame {
     wave_changed: wave_changed,
     adsr_changed: adsr_changed,
     pulse_changed: pulse_changed,
+    gate_triggered: gate_triggered,
   )
 }
 

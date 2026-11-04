@@ -8,7 +8,7 @@ PORT  ?= 3000
 HOST  ?= 0.0.0.0
 export BROWSER ?= firefox
 
-.PHONY: help build dev test check format deps run preview clean start
+.PHONY: help build dev test check format deps run preview clean start siddump-wasm
 
 help:
 	@echo "sid-to-skode Makefile targets:"
@@ -21,8 +21,14 @@ help:
 	@echo "  make check        Verify Gleam types and compilation"
 	@echo "  make format       Format all Gleam source and test files"
 	@echo "  make deps         Download Gleam packages and install npm dependencies"
+	@echo "  make siddump-wasm Compile siddump C source to WebAssembly"
 	@echo "  make preview      Preview production build in dist/ on $(HOST):$(PORT)"
 	@echo "  make clean        Remove build and dist artifacts"
+
+siddump-wasm:
+	@echo "==> Compiling siddump to WebAssembly with emcc..."
+	mise exec -- emcc c_src/siddump/siddump.c c_src/siddump/cpu.c -O2 -s MODULARIZE=1 -s EXPORT_ES6=1 -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS='["callMain","FS"]' -o vendor/siddump_wasm.js
+	cp vendor/siddump_wasm.js vendor/siddump_wasm.wasm public/vendor/
 
 deps:
 	mise exec -- gleam deps download
