@@ -367,6 +367,7 @@ fn voice_filter_tokens(
 fn generate_filter_step_tokens(
   ff: FilterFrame,
   tracker: FilterTracker,
+  has_digi: Bool,
 ) -> #(List(String), FilterTracker) {
   let mode_int = filter_mode_int(ff.mode_str)
   let prev_mode_int = filter_mode_int(tracker.last_mode)
@@ -424,10 +425,22 @@ fn generate_filter_step_tokens(
     True -> {
       let vol_db = case ff.volume {
         0 -> -100
+        // In C64 digi tunes, $D418 resting level is 7 (or 8) as the 4-bit DC center bias,
+        // which represents nominal full playback volume for the synth voices.
+        v if has_digi && { v == 7 || v == 8 || v == 15 } -> -8
         v -> -8 + { v - 15 } * 2
       }
       let db_str = "a" <> int.to_string(vol_db)
-      #(["v0", db_str, "v1", db_str, "v2", db_str], ff.volume)
+      let voice_toks = case has_digi {
+        True -> ["v0", db_str, "v1", db_str, "v2", db_str, "v3", db_str]
+        False -> ["v0", db_str, "v1", db_str, "v2", db_str]
+      }
+      // On step 0, if vol_db is nominal -8, voices are already at -8, so omit redundant tokens
+      let toks = case tracker.last_vol == -1 && vol_db == -8 {
+        True -> []
+        False -> voice_toks
+      }
+      #(toks, ff.volume)
     }
     False -> #([], tracker.last_vol)
   }
@@ -452,13 +465,22 @@ pub fn convert_song(
   song: DumpSong,
   stereo: StereoMode,
 ) -> Result(ConversionResult, String) {
-  convert_song_with_options(song, stereo, True)
+  convert_song_full(song, stereo, True, 0.0)
 }
 
 pub fn convert_song_with_options(
   song: DumpSong,
   stereo: StereoMode,
   dac_crunch: Bool,
+) -> Result(ConversionResult, String) {
+  convert_song_full(song, stereo, dac_crunch, 0.0)
+}
+
+pub fn convert_song_full(
+  song: DumpSong,
+  stereo: StereoMode,
+  dac_crunch: Bool,
+  sample_pan: Float,
 ) -> Result(ConversionResult, String) {
   let frame_count = song.frame_count
   case frame_count == 0 {
@@ -527,7 +549,8 @@ pub fn convert_song_with_options(
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
-          "v3 [Digi Percussion] vt a0 f440 t0.001,0.001,1.0,0.001 p0.0",
+          "v3 [Digi Percussion] vt a-8 f440 t0.001,0.001,1.0,0.001 p"
+            <> format_float(sample_pan, 2),
         ]
         False -> [
           "S0 S1 S2",
@@ -600,9 +623,7 @@ pub fn convert_song_with_options(
           ],
         ])
 
-      let digi_events_map =
-        list.map(song.digi_events, fn(e) { #(e.frame, e.slot) })
-        |> dict.from_list
+      let digi_events_map = song.digi_events_map
 
       // State tracking accumulator for all 3 voices + filter
       let initial_acc = #(
@@ -684,7 +705,8 @@ pub fn convert_song_with_options(
           }
 
           // Conductor / Filter / Digi (Track 3)
-          let #(toks_f, ntf) = generate_filter_step_tokens(frame.filter, tf)
+          let #(toks_f, ntf) =
+            generate_filter_step_tokens(frame.filter, tf, has_digi)
 
           let digi_toks = case dict.get(digi_events_map, step_idx) {
             Ok(slot) -> [

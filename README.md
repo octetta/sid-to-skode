@@ -32,9 +32,12 @@ Available both as a **100% client-side web application** with in-browser 6502 CP
   - [5. Cross-Oscillator Ring Modulation (`XM`)](#5-cross-oscillator-ring-modulation-xm)
   - [6. Realtime Biquad Filter Automation (`j`, `k`, `q`)](#6-realtime-biquad-filter-automation-j-k-q)
   - [7. Calibrated Headroom & Authentic Mono Default](#7-calibrated-headroom--authentic-mono-default)
+  - [8. C64 PCM Digi Sample Extraction Magic (`w310+`, `/D`, `( ... ) /d`, `f440`)](#8-c64-pcm-digi-sample-extraction-magic-w310-d----d-f440)
 - [Web Studio Features](#web-studio-features)
+  - [Featured Offline Demos: Hubbard & Hülsbeck](#featured-offline-demos-hubbard--hülsbeck)
   - [100% Client-Side Public Archive Streaming (No Pre-Download Bloat)](#100-client-side-public-archive-streaming-no-pre-download-bloat)
   - [Live SID Register Activity Monitor & Delta Inspector](#live-sid-register-activity-monitor--delta-inspector)
+  - [Dedicated Digi Sample Voice Panning & Interactive Cards](#dedicated-digi-sample-voice-panning--interactive-cards)
   - [Interactive Skred Terminal REPL (`Ctrl+~`)](#interactive-skred-terminal-repl-ctrl)
   - [Mobile & Touch-Friendly Interface](#mobile--touch-friendly-interface)
   - [Direct DeepSID & HVSC Mirror Links](#direct-deepsid--hvsc-mirror-links)
@@ -151,14 +154,25 @@ The SID 11-bit Cutoff ($30\text{ Hz} - 12\text{ kHz}$) and 4-bit Resonance map t
 - **Calibrated Gain Staging:** Individual voice nominal levels are calibrated to `-8 dBFS` per voice (`a-8`), and master volume defaults to `V -8 dB`. This headroom ensures that multi-oscillator summing and resonant filter sweeps never clip or induce digital harshness.
 - **Authentic Mono Default:** The Commodore 64 had a single RCA audio output. In `sid-to-skode`, the default stereo profile is centered **📻 Authentic Mono** (`p 0.0`), with optional switches for **🎧 Headphone (75%)** and **🔊 Wide (100%)**.
 
+### 8. C64 PCM Digi Sample Extraction Magic (`w310+`, `/D`, `( ... ) /d`, `f440`)
+In the golden age of Commodore 64 composition, composers like Chris Hülsbeck (*The Great Giana Sisters*), Jeroen Tel, and Martin Galway pioneered 4-bit sample playback ("digis") by streaming 4-bit nibbles directly into the SID master volume register ($D418) or via custom timer IRQ routines:
+- **Direct 6502 Memory Extraction:** `siddump_wasm` monitors 6502 zero-page writes during emulation. When playroutines initialize sample pointers at `$04` and end pointers at `$02`, the extractor intercepts the address range, unpacks 4-bit nibbles from C64 RAM, DC-centers them around zero, and normalizes them into signed floating-point audio ($-1.0 \dots +1.0$).
+- **Inline Self-Contained Wavetables:** Rather than requiring external sample files, extracted PCM data is compiled directly as inline Skode wavetable arrays `( <floats...> ) /d <slot>,<rate>` inside the script header, mapped to wavetable slots `w310`, `w311`, `w312`, etc. Skred automatically resizes sampler memory with `/D 4096`.
+- **Unity Pitch Playback (`f440`):** In Skred's one-shot sampler core, phase increment is computed as $(g / 440.0) \times (\text{rate} / \text{samplerate})$. Triggering `v3 w<slot>,1,1 f440 l1` plays samples at their exact recorded frequency ($6842\text{ Hz}$).
+- **Acoustic Volume Balancing:** During idle periods in digi tunes, register `$D418` rests at quiescent DC bias `7` (or `8`), which represents full nominal amplitude for synth voices. `sid-to-skode` maps this resting bias to $-8\text{ dBFS}$, balancing Voice 3 percussion hits with Voices 0–2 synth lines with zero overpowering jumps.
+- **Dedicated Panning Automation:** Voice 3 includes its own real-time stereo pan slider (`v3 p#`), allowing drum samples to be centered or panned freely alongside synthetic leads and bass.
+
 ---
 
 ## Web Studio Features
 
+### Featured Offline Demos: Hubbard & Hülsbeck
+Two iconic C64 tracks are bundled locally for instant, zero-network offline demonstration:
+- **Rob Hubbard – Commando:** Pure 3-voice SID synthesis masterpiece with lightning-fast arpeggios, PWM bass, and filtered noise percussion.
+- **Chris Hülsbeck – The Great Giana Sisters:** The definitive demonstration of C64 4-bit PCM digi percussion (Kick `w310`, Snare `w311`, Hihat `w312`) synthesized and sequenced alongside classic analog SID voices.
+
 ### 100% Client-Side Public Archive Streaming (No Pre-Download Bloat)
 Rather than pre-downloading and storing megabytes of dump text files in the repository, `sid-to-skode` pulls `.sid` files directly on demand over HTTP from public High Voltage SID Collection mirrors (via GitHub raw and jsDelivr CDN endpoints with global CORS support). Songs play for their natural duration without artificial 90-second caps.
-
-A single high-impact demonstration file (**Rob Hubbard's Commando**) is bundled locally as an instant, zero-network offline safety fallback.
 
 ### Live SID Register Activity Monitor & Delta Inspector
 The **🎛️ SID Voices & Filter** tab features a live hardware register strip that reflects every MOS 6581/8580 register write in real time:
@@ -167,6 +181,12 @@ The **🎛️ SID Voices & Filter** tab features a live hardware register strip 
 - `$D40E-$D414`: Voice 3.
 - `$D415-$D418`: Filter Cutoff, Resonance, Voice Routing, and Mode/Volume.
 - Live **$\Delta$ WRITE** badges and pulse highlights glow on the exact frame a hardware register changes, making chiptune sound design visible.
+- Dedicated **Digi $04 PCM** block lights up whenever a drum sample trigger hits in the playroutine.
+
+### Dedicated Digi Sample Voice Panning & Interactive Cards
+When a digi-enabled tune is detected:
+- **Dedicated Panning Slider:** A 4th slider (`Digi`) automatically appears in the stereo control toolbar, sending live `v3 p<pan>` commands to Skred.
+- **PCM Digi Sample Card:** An interactive breakdown in the **ℹ️ Tune Info** tab details every captured wavetable (`w310`, `w311`, `w312`), sample lengths, sampling rates in Hz, playback duration in milliseconds, and total trigger counts throughout the song.
 
 ### Interactive Skred Terminal REPL (`Ctrl+~`)
 Press `Ctrl+~` (or `Ctrl+\`` / `Escape` to close), or tap `>_ REPL` in the header:

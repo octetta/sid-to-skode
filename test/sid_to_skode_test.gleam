@@ -336,14 +336,27 @@ pub fn digi_sample_extraction_and_conversion_test() {
   string.contains(res.skode_text, "/D 4096") |> should.be_true
   string.contains(res.skode_text, "/d 310,6842") |> should.be_true
 
-  // Must initialize Voice 3 for digi percussion
-  string.contains(res.skode_text, "v3 [Digi Percussion]") |> should.be_true
+  // Must initialize Voice 3 for digi percussion at nominal -8 dBFS
+  string.contains(res.skode_text, "v3 [Digi Percussion] vt a-8 f440")
+  |> should.be_true
+
+  // Volume 7 resting DC bias must not produce false -24 dB attenuation on step 0
+  string.contains(res.skode_text, "a-24") |> should.be_false
 
   // Must trigger Voice 3 at step x2 at unity sampler rate f440
   string.contains(res.skode_text, "[v3 w310,1,1 f440 l1] x2") |> should.be_true
 
   // Must silence v3 in stop macros
   string.contains(res.skode_text, "v3 l0") |> should.be_true
+
+  // Custom sample voice panning must be applied when specified
+  let assert Ok(res_pan) =
+    converter.convert_song_full(song, StereoHeadphone, True, -0.45)
+  string.contains(
+    res_pan.skode_text,
+    "v3 [Digi Percussion] vt a-8 f440 t0.001,0.001,1.0,0.001 p-0.45",
+  )
+  |> should.be_true
 }
 
 

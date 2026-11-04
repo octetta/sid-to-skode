@@ -1734,6 +1734,65 @@ html, body {
   gap: 8px;
 }
 
+.meta-item-digi {
+  background: rgba(245, 158, 11, 0.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.highlight-gold {
+  color: #f59e0b !important;
+}
+
+.highlight-yellow {
+  color: #fbbf24 !important;
+}
+
+.highlight-green {
+  color: #34d399 !important;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.digi-samples-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.digi-samples-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background-color: var(--bg-app);
+}
+
+.digi-samples-table th {
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.digi-samples-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+.digi-samples-table tr:last-child td {
+  border-bottom: none;
+}
+
 .meta-link-hvsc {
   font-size: 0.85rem;
   font-weight: 600;
@@ -2256,7 +2315,8 @@ html, body {
 
   .meta-title-item,
   .meta-source-item,
-  .meta-item-hvsc {
+  .meta-item-hvsc,
+  .meta-item-digi {
     grid-column: 1 / -1;
   }
 

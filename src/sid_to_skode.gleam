@@ -237,6 +237,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       catalog_info: None,
       stereo_mode: StereoMono,
       voice_pan: #(0.0, 0.0, 0.0),
+      sample_pan: 0.0,
       master_volume: -8,
       raw_dump_text: "",
       source_description: "",
@@ -303,10 +304,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         }
         Ok(song) -> {
           case
-            converter.convert_song_with_options(
+            converter.convert_song_full(
               song,
               model.stereo_mode,
               model.dac_crunch,
+              model.sample_pan,
             )
           {
             Error(err) -> {
@@ -552,10 +554,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let re_conv = case model.active_song {
         Some(song) -> {
           case
-            converter.convert_song_with_options(
+            converter.convert_song_full(
               song,
               new_mode,
               model.dac_crunch,
+              model.sample_pan,
             )
           {
             Ok(conv) -> Some(conv)
@@ -578,31 +581,87 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     VoicePanChanged(v, pan) -> {
       let clamped = float.clamp(pan, -1.0, 1.0)
-      let #(p0, p1, p2) = model.voice_pan
-      let next_pans = case v {
-        0 -> #(clamped, p1, p2)
-        1 -> #(p0, clamped, p2)
-        2 -> #(p0, p1, clamped)
-        _ -> model.voice_pan
+      case v {
+        3 -> {
+          let cmd = converter.build_voice_pan_command(3, clamped)
+          let status =
+            "Digi Sample Voice pan: "
+            <> format_pan_label(clamped)
+            <> " ("
+            <> converter.format_float(clamped, 2)
+            <> ")"
+          let re_conv = case model.active_song {
+            Some(song) -> {
+              case
+                converter.convert_song_full(
+                  song,
+                  model.stereo_mode,
+                  model.dac_crunch,
+                  clamped,
+                )
+              {
+                Ok(conv) -> Some(conv)
+                Error(_) -> model.conversion
+              }
+            }
+            None -> model.conversion
+          }
+          #(
+            Model(
+              ..model,
+              sample_pan: clamped,
+              conversion: re_conv,
+              status_text: status,
+            ),
+            send_command_effect(cmd),
+          )
+        }
+        _ -> {
+          let #(p0, p1, p2) = model.voice_pan
+          let next_pans = case v {
+            0 -> #(clamped, p1, p2)
+            1 -> #(p0, clamped, p2)
+            2 -> #(p0, p1, clamped)
+            _ -> model.voice_pan
+          }
+          let next_mode = StereoCustom(next_pans.0, next_pans.1, next_pans.2)
+          let cmd = converter.build_voice_pan_command(v, clamped)
+          let status =
+            "Voice "
+            <> int.to_string(v + 1)
+            <> " pan: "
+            <> format_pan_label(clamped)
+            <> " ("
+            <> converter.format_float(clamped, 2)
+            <> ")"
+          let re_conv = case model.active_song {
+            Some(song) -> {
+              case
+                converter.convert_song_full(
+                  song,
+                  next_mode,
+                  model.dac_crunch,
+                  model.sample_pan,
+                )
+              {
+                Ok(conv) -> Some(conv)
+                Error(_) -> model.conversion
+              }
+            }
+            None -> model.conversion
+          }
+          #(
+            Model(
+              ..model,
+              voice_pan: next_pans,
+              stereo_mode: next_mode,
+              conversion: re_conv,
+              status_text: status,
+            ),
+            send_command_effect(cmd),
+          )
+        }
       }
-      let cmd = converter.build_voice_pan_command(v, clamped)
-      let status =
-        "Voice "
-        <> int.to_string(v + 1)
-        <> " pan: "
-        <> format_pan_label(clamped)
-        <> " ("
-        <> converter.format_float(clamped, 2)
-        <> ")"
-      #(
-        Model(
-          ..model,
-          voice_pan: next_pans,
-          stereo_mode: StereoCustom(next_pans.0, next_pans.1, next_pans.2),
-          status_text: status,
-        ),
-        send_command_effect(cmd),
-      )
     }
 
     MasterVolumeChanged(vol) -> {
@@ -629,10 +688,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let re_conv = case model.active_song {
         Some(song) -> {
           case
-            converter.convert_song_with_options(
+            converter.convert_song_full(
               song,
               model.stereo_mode,
               next_dac,
+              model.sample_pan,
             )
           {
             Ok(conv) -> Some(conv)
@@ -1272,6 +1332,10 @@ fn format_pan_label(pan: Float) -> String {
 
 fn view_stereo_selector(model: Model) -> Element(Msg) {
   let #(p0, p1, p2) = model.voice_pan
+  let has_digi = case model.active_song {
+    Some(song) -> !list.is_empty(song.digi_samples)
+    None -> False
+  }
   html.div([class("stereo-control-group")], [
     html.div([class("stereo-presets-row")], [
       html.span([class("stereo-label")], [text("PANNING")]),
@@ -1311,11 +1375,19 @@ fn view_stereo_selector(model: Model) -> Element(Msg) {
         ),
       ]),
     ]),
-    html.div([class("voice-pan-sliders")], [
-      view_voice_pan_slider(0, "V1", p0),
-      view_voice_pan_slider(1, "V2", p1),
-      view_voice_pan_slider(2, "V3", p2),
-    ]),
+    html.div([class("voice-pan-sliders")], case has_digi {
+      True -> [
+        view_voice_pan_slider(0, "V1", p0),
+        view_voice_pan_slider(1, "V2", p1),
+        view_voice_pan_slider(2, "V3", p2),
+        view_voice_pan_slider(3, "Digi", model.sample_pan),
+      ]
+      False -> [
+        view_voice_pan_slider(0, "V1", p0),
+        view_voice_pan_slider(1, "V2", p1),
+        view_voice_pan_slider(2, "V3", p2),
+      ]
+    }),
   ])
 }
 
@@ -1444,7 +1516,27 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     ]),
   ]
 
-  html.div([class("metadata-bar")], list.append(base_items, hvsc_items))
+  let digi_badges = case song.digi_samples {
+    [] -> []
+    samples -> {
+      let slots_str =
+        list.map(samples, fn(s) { "w" <> int.to_string(s.slot) })
+        |> string.join(", ")
+      [
+        html.div([class("meta-item meta-item-digi")], [
+          html.span([class("meta-label")], [text("DIGI SAMPLES")]),
+          html.span([class("meta-val highlight-gold mono")], [
+            text("🥁 " <> slots_str),
+          ]),
+        ]),
+      ]
+    }
+  }
+
+  html.div(
+    [class("metadata-bar")],
+    list.flatten([base_items, digi_badges, hvsc_items]),
+  )
 }
 
 fn view_tabs_navigation(model: Model) -> Element(Msg) {
@@ -1553,6 +1645,66 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
     None -> []
   }
 
+  let digi_card = case list.is_empty(song.digi_samples) {
+    True -> []
+    False -> [
+      html.div([class("song-info-card digi-info-card")], [
+        html.h3([class("card-title highlight-gold")], [
+          text("🥁 Captured C64 PCM Digi Samples (Inline Skode Wavetables)"),
+        ]),
+        html.p([class("card-body-text")], [
+          text(
+            "This Commodore 64 tune features 4-bit nibble PCM sample playback (percussion / speech) driven by custom 6502 playroutines. During conversion, sid-to-skode detected zero-page sample vector updates ($04 sample pointer and $02 end boundary) and automatically extracted the raw sample bytes from C64 RAM. The nibbles are decoded, DC-centered, normalized to bipolar floating-point, and compiled directly as inline Skode wavetables (( ... ) /d <slot>,<rate>) inside the header. No external audio files are required — the generated script is 100% self-contained and playable anywhere Skred runs!",
+          ),
+        ]),
+        html.div([class("digi-samples-table-wrap")], [
+          html.table([class("digi-samples-table mono")], [
+            html.thead([], [
+              html.tr([], [
+                html.th([], [text("Slot")]),
+                html.th([], [text("Wavetable")]),
+                html.th([], [text("Length")]),
+                html.th([], [text("Sample Rate")]),
+                html.th([], [text("Duration")]),
+                html.th([], [text("Song Hits")]),
+              ]),
+            ]),
+            html.tbody(
+              [],
+              list.map(song.digi_samples, fn(s) {
+                let trigger_count =
+                  list.filter(song.digi_events, fn(ev) { ev.slot == s.slot })
+                  |> list.length
+                let duration_ms =
+                  int.to_float(s.length)
+                  *. 1000.0
+                  /. s.rate
+                html.tr([], [
+                  html.td([class("highlight-cyan")], [
+                    text("#" <> int.to_string(s.slot)),
+                  ]),
+                  html.td([class("highlight-yellow font-bold")], [
+                    text("w" <> int.to_string(s.slot)),
+                  ]),
+                  html.td([], [text(int.to_string(s.length) <> " samples")]),
+                  html.td([], [
+                    text(converter.format_float(s.rate, 0) <> " Hz"),
+                  ]),
+                  html.td([], [
+                    text(converter.format_float(duration_ms, 1) <> " ms"),
+                  ]),
+                  html.td([class("highlight-green")], [
+                    text(int.to_string(trigger_count) <> " hits"),
+                  ]),
+                ])
+              }),
+            ),
+          ]),
+        ]),
+      ]),
+    ]
+  }
+
   let base_cards = [
     html.div([class("song-info-card")], [
       html.h3([class("card-title")], [text("Commodore 64 Sound Details")]),
@@ -1591,7 +1743,10 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
     ]),
   ]
 
-  html.div([class("info-tab-layout")], list.append(archive_card, base_cards))
+  html.div(
+    [class("info-tab-layout")],
+    list.flatten([archive_card, digi_card, base_cards]),
+  )
 }
 
 fn info_row(label: String, val: String) -> Element(Msg) {
@@ -1638,15 +1793,39 @@ fn view_tab_voices(model: Model, song: DumpSong) -> Element(Msg) {
   }
 
   html.div([class("voices-tab-layout")], [
-    view_register_strip(step_idx, song.frame_count, frame),
+    view_register_strip(step_idx, song.frame_count, frame, song),
   ])
 }
 
-fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
+fn view_register_strip(
+  step: Int,
+  total: Int,
+  frame: SidFrame,
+  song: DumpSong,
+) -> Element(Msg) {
   let v1 = frame.v1
   let v2 = frame.v2
   let v3 = frame.v3
   let flt = frame.filter
+
+  let digi_block = case list.is_empty(song.digi_samples) {
+    True -> []
+    False -> {
+      let #(hit_text, hit_changed) = case dict.get(song.digi_events_map, step) {
+        Ok(slot) -> #("w" <> int.to_string(slot) <> " HIT", True)
+        Error(_) -> #("Idle", False)
+      }
+      let sample_count = int.to_string(list.length(song.digi_samples))
+      [
+        reg_block("Digi $04 PCM", [
+          reg_val("Status", hit_text, hit_changed),
+          reg_val("Pool", sample_count <> " samples", False),
+          reg_val("Rate", "6842 Hz", False),
+          reg_val("Voice", "v3 (Track 3)", False),
+        ]),
+      ]
+    }
+  }
 
   html.div([class("sid-reg-strip card")], [
     html.div([class("reg-strip-header")], [
@@ -1668,35 +1847,41 @@ fn view_register_strip(step: Int, total: Int, frame: SidFrame) -> Element(Msg) {
         text("50.0 Hz PAL · 20.0ms tick"),
       ]),
     ]),
-    html.div([class("reg-blocks-row mono")], [
-      reg_block(voice_reg_header("V1", "$D400", v1), [
-        reg_val("Freq", "$" <> hex4(v1.freq), v1.freq_changed),
-        reg_val("PW", "$" <> hex4(v1.pulse_width), v1.pulse_changed),
-        reg_val("Ctrl", "$" <> hex2(v1.waveform_byte), v1.wave_changed),
-        reg_val("ADSR", "$" <> hex4(v1.adsr), v1.adsr_changed),
-      ]),
-      reg_block(voice_reg_header("V2", "$D407", v2), [
-        reg_val("Freq", "$" <> hex4(v2.freq), v2.freq_changed),
-        reg_val("PW", "$" <> hex4(v2.pulse_width), v2.pulse_changed),
-        reg_val("Ctrl", "$" <> hex2(v2.waveform_byte), v2.wave_changed),
-        reg_val("ADSR", "$" <> hex4(v2.adsr), v2.adsr_changed),
-      ]),
-      reg_block(voice_reg_header("V3", "$D40E", v3), [
-        reg_val("Freq", "$" <> hex4(v3.freq), v3.freq_changed),
-        reg_val("PW", "$" <> hex4(v3.pulse_width), v3.pulse_changed),
-        reg_val("Ctrl", "$" <> hex2(v3.waveform_byte), v3.wave_changed),
-        reg_val("ADSR", "$" <> hex4(v3.adsr), v3.adsr_changed),
-      ]),
-      reg_block(filter_reg_header(flt), [
-        reg_val("Cutoff", "$" <> hex4(flt.cutoff), flt.cutoff_changed),
-        reg_val("Res/R", "$" <> hex2(flt.res_routing), flt.ctrl_changed),
-        reg_val(
-          "Mode/Vol",
-          "$" <> hex2(flt.volume),
-          flt.vol_changed || flt.mode_changed,
-        ),
-      ]),
-    ]),
+    html.div(
+      [class("reg-blocks-row mono")],
+      list.append(
+        [
+          reg_block(voice_reg_header("V1", "$D400", v1), [
+            reg_val("Freq", "$" <> hex4(v1.freq), v1.freq_changed),
+            reg_val("PW", "$" <> hex4(v1.pulse_width), v1.pulse_changed),
+            reg_val("Ctrl", "$" <> hex2(v1.waveform_byte), v1.wave_changed),
+            reg_val("ADSR", "$" <> hex4(v1.adsr), v1.adsr_changed),
+          ]),
+          reg_block(voice_reg_header("V2", "$D407", v2), [
+            reg_val("Freq", "$" <> hex4(v2.freq), v2.freq_changed),
+            reg_val("PW", "$" <> hex4(v2.pulse_width), v2.pulse_changed),
+            reg_val("Ctrl", "$" <> hex2(v2.waveform_byte), v2.wave_changed),
+            reg_val("ADSR", "$" <> hex4(v2.adsr), v2.adsr_changed),
+          ]),
+          reg_block(voice_reg_header("V3", "$D40E", v3), [
+            reg_val("Freq", "$" <> hex4(v3.freq), v3.freq_changed),
+            reg_val("PW", "$" <> hex4(v3.pulse_width), v3.pulse_changed),
+            reg_val("Ctrl", "$" <> hex2(v3.waveform_byte), v3.wave_changed),
+            reg_val("ADSR", "$" <> hex4(v3.adsr), v3.adsr_changed),
+          ]),
+          reg_block(filter_reg_header(flt), [
+            reg_val("Cutoff", "$" <> hex4(flt.cutoff), flt.cutoff_changed),
+            reg_val("Res/R", "$" <> hex2(flt.res_routing), flt.ctrl_changed),
+            reg_val(
+              "Mode/Vol",
+              "$" <> hex2(flt.volume),
+              flt.vol_changed || flt.mode_changed,
+            ),
+          ]),
+        ],
+        digi_block,
+      ),
+    ),
   ])
 }
 

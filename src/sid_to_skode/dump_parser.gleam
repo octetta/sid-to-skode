@@ -402,6 +402,11 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
     list.map(reversed_frames, fn(f) { #(f.frame_index, f) })
     |> dict.from_list
 
+  let rev_digi_events = list.reverse(final_state.digi_events)
+  let digi_events_map =
+    list.map(rev_digi_events, fn(ev) { #(ev.frame, ev.slot) })
+    |> dict.from_list
+
   case count > 0 {
     True ->
       Ok(DumpSong(
@@ -413,7 +418,8 @@ pub fn parse_dump(content: String, title: String) -> Result(DumpSong, String) {
         frame_count: count,
         frame_rate: 50.0,
         digi_samples: list.reverse(final_state.digi_samples),
-        digi_events: list.reverse(final_state.digi_events),
+        digi_events: rev_digi_events,
+        digi_events_map: digi_events_map,
       ))
     False -> Error("No valid SID dump rows found in file.")
   }

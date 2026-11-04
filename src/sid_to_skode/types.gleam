@@ -102,6 +102,7 @@ pub type DumpSong {
     frame_rate: Float,
     digi_samples: List(DigiSample),
     digi_events: List(DigiEvent),
+    digi_events_map: Dict(Int, Int),
   )
 }
 
@@ -138,6 +139,7 @@ pub type Model {
     catalog_info: Option(SidCatalogInfo),
     stereo_mode: StereoMode,
     voice_pan: #(Float, Float, Float),
+    sample_pan: Float,
     master_volume: Int,
     raw_dump_text: String,
     source_description: String,
