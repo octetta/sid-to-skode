@@ -339,8 +339,8 @@ pub fn digi_sample_extraction_and_conversion_test() {
   // Must initialize Voice 3 for digi percussion
   string.contains(res.skode_text, "v3 [Digi Percussion]") |> should.be_true
 
-  // Must trigger Voice 3 at step x2 at exact rate (6842 / 4 = 1710.5 Hz)
-  string.contains(res.skode_text, "[v3 w310,1,1 f1710.500 l1] x2") |> should.be_true
+  // Must trigger Voice 3 at step x2 at unity sampler rate f440
+  string.contains(res.skode_text, "[v3 w310,1,1 f440 l1] x2") |> should.be_true
 
   // Must silence v3 in stop macros
   string.contains(res.skode_text, "v3 l0") |> should.be_true

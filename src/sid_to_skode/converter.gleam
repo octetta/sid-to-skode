@@ -527,7 +527,7 @@ pub fn convert_song_with_options(
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
-          "v3 [Digi Percussion] vt a0 t0.001,0.001,1.0,0.001 p0.0",
+          "v3 [Digi Percussion] vt a0 f440 t0.001,0.001,1.0,0.001 p0.0",
         ]
         False -> [
           "S0 S1 S2",
@@ -602,10 +602,6 @@ pub fn convert_song_with_options(
 
       let digi_events_map =
         list.map(song.digi_events, fn(e) { #(e.frame, e.slot) })
-        |> dict.from_list
-
-      let digi_samples_map =
-        list.map(song.digi_samples, fn(s) { #(s.slot, s) })
         |> dict.from_list
 
       // State tracking accumulator for all 3 voices + filter
@@ -691,25 +687,12 @@ pub fn convert_song_with_options(
           let #(toks_f, ntf) = generate_filter_step_tokens(frame.filter, tf)
 
           let digi_toks = case dict.get(digi_events_map, step_idx) {
-            Ok(slot) -> {
-              case dict.get(digi_samples_map, slot) {
-                Ok(s) -> {
-                  let hz = s.rate /. int.to_float(s.length)
-                  [
-                    "v3",
-                    "w" <> int.to_string(slot) <> ",1,1",
-                    "f" <> format_float(hz, 3),
-                    "l1",
-                  ]
-                }
-                Error(_) -> [
-                  "v3",
-                  "w" <> int.to_string(slot) <> ",1,1",
-                  "f13.36",
-                  "l1",
-                ]
-              }
-            }
+            Ok(slot) -> [
+              "v3",
+              "w" <> int.to_string(slot) <> ",1,1",
+              "f440",
+              "l1",
+            ]
             Error(_) -> []
           }
 
