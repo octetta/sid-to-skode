@@ -777,7 +777,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       ]),
       html.p([class("drop-subtitle")], [
         text(
-          "MOS 6581 / 8580 SID chiptune conversion. Synthesizes Skred's analog-modeled waveforms (w15 analog saw, w16 analog square/PWM, w18 analog triangle, w5 noise), CZ phase-distortion PWM (c1,#), calibrated headroom, ring modulation (XM) & realtime biquad filters.",
+          "MOS 6581 / 8580 SID chiptune conversion. Synthesizes dedicated Ksynth-modeled SID waveforms (w300 triangle, w301 saw, w302 pulse/PWM, w303 saw+tri, w304 saw+pulse, w6 live white noise), CZ phase-distortion PWM (c1,#), calibrated headroom, ring modulation & realtime biquad filters.",
         ),
       ]),
       html.div([class("file-select-wrapper")], [
@@ -914,7 +914,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       html.pre([class("developer-code-preview")], [
         html.code([], [
           text(
-            "# 1. Bandlimited Analog Waves:\nw15 -> Bandlimited Sawtooth (SID Saw)\nw16 -> Bandlimited Square (SID Pulse)\nw18 -> Bandlimited Triangle (SID Tri)\nw6  -> Knuth MMIX LCG White Noise (SID Noise)\n\n# 2. CZ Phase-Distortion PWM:\nc1,-0.5 -> Narrow Pulse (25% Duty)\nc1,0.0  -> Square Wave (50% Duty)\nc1,0.5  -> Wide Pulse (75% Duty)\n\n# 3. Dynamic Biquad Filtering:\nJ1 K1200 Q1.5 -> Resonant Low-Pass at 1.2 kHz\nJ2 K400  Q0.7 -> High-Pass at 400 Hz\nJ3 K800  Q3.0 -> Band-Pass centered at 800 Hz",
+            "# 1. Ksynth-Generated SID Waveforms:\nw300 -> Bandlimited Triangle (SID Tri, odd harmonics 1/h^2, alternating phase)\nw301 -> Bandlimited Sawtooth (SID Saw, 64 harmonics 1/h)\nw302 -> Bandlimited Square (SID Pulse, 50% square + CZ PWM)\nw303 -> Combined Saw+Triangle ($30 hybrid)\nw304 -> Combined Saw+Pulse ($60 hybrid)\nw6   -> Live White Noise (Continuous Hardware RNG, zero cyclic comb-filter buzz)\n\n# 2. CZ Phase-Distortion PWM:\nc1,-0.5 -> Narrow Pulse (25% Duty)\nc1,0.0  -> Square Wave (50% Duty)\nc1,0.5  -> Wide Pulse (75% Duty)\n\n# 3. Dynamic Biquad Filtering:\nj1 k1200 q1.5 -> Resonant Low-Pass at 1.2 kHz\nj2 k400  q0.7 -> High-Pass at 400 Hz\nj3 k800  q3.0 -> Band-Pass centered at 800 Hz",
           ),
         ]),
       ]),
@@ -1408,7 +1408,7 @@ fn view_metadata_bar(model: Model, song: DumpSong) -> Element(Msg) {
     html.div([class("meta-item")], [
       html.span([class("meta-label")], [text("OSCILLATORS")]),
       html.span([class("meta-val highlight-analog")], [
-        text("Analog (w15/w16/w18/w5)"),
+        text("Ksynth SID (w300..w304/w6)"),
       ]),
     ]),
     html.div([class("meta-item")], [
@@ -1564,11 +1564,11 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
     ]),
     html.div([class("song-info-card")], [
       html.h3([class("card-title")], [
-        text("⚡ Skred Bandlimited Analog Waveforms & Headroom"),
+        text("⚡ Dedicated Ksynth SID Waveform Model & Calibrated Headroom"),
       ]),
       html.p([class("card-body-text")], [
         text(
-          "To authentically reproduce the warmth, harmonic richness, and punch of the Commodore 64 MOS SID (6581/8580), sid-to-skode routes voices directly to Skred's bandlimited analog-modeled oscillator core:\n\n• w15 -> Bandlimited Analog Sawtooth (SID Saw)\n• w16 -> Bandlimited Analog Square / Pulse with CZ phase-distortion PWM (c1,#)\n• w18 -> Bandlimited Analog Triangle (SID Tri)\n• w5  -> SID White Noise Generator\n\nGain Staging & Headroom: Voice amplitudes are calibrated with -8 dBFS per-voice nominal headroom (V -8 dB master) so that multi-oscillator summing and high-resonance biquad filter sweeps (j/k/q) never clip or produce ear-fatiguing distortion.",
+          "To authentically reproduce the warmth, harmonic richness, and punch of the Commodore 64 MOS SID (6581/8580), sid-to-skode executes inline Ksynth vector synthesis scripts inside the generated .sk file to build bandlimited oscillator wavetables:\n\n• w300 -> SID Bandlimited Triangle (true alternating odd harmonics 1/h^2)\n• w301 -> SID Bandlimited Sawtooth (64 harmonics 1/h)\n• w302 -> SID Bandlimited Square / Pulse with CZ phase-distortion PWM (c1,#)\n• w303 -> SID Combined Saw+Triangle ($30 hybrid)\n• w304 -> SID Combined Saw+Pulse ($60 hybrid)\n• w6   -> Live White Noise (Continuous Hardware Audio RNG, zero cyclic comb-filter buzz)\n\nGain Staging & Headroom: Voice amplitudes are calibrated with -8 dBFS per-voice nominal headroom (V -8 dB master) so that multi-oscillator summing and high-resonance biquad filter sweeps (j/k/q) never clip or produce ear-fatiguing distortion.",
         ),
       ]),
     ]),

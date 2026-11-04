@@ -85,14 +85,16 @@ function handleCommand(cmd) {
   if (lower === "-help" || lower === "-?") {
     appendReplOutput(
       "info",
-      `=== SKRED v0.80.0 COMMAND REFERENCE ===
+      `=== SKRED v0.80.1 COMMAND REFERENCE ===
 • Voices & Waves:
   v<0..255>       Select voice (e.g. 'v0')
-  w<0..24>        Set waveform:
-                  w15: Analog Sawtooth (SID Saw)
-                  w16: Analog Square / Pulse (SID Square/PWM)
-                  w18: Analog Triangle (SID Tri)
-                  w5:  White Noise (SID Noise)
+  w<0..999>       Set waveform:
+                  w300: Ksynth Bandlimited Triangle (SID Tri)
+                  w301: Ksynth Bandlimited Sawtooth (SID Saw)
+                  w302: Ksynth Bandlimited Square / Pulse (SID Pulse/PWM)
+                  w303: Ksynth Combined Saw+Triangle ($30)
+                  w304: Ksynth Combined Saw+Pulse ($60)
+                  w6:   Live White Noise (Continuous Hardware Audio RNG, zero cyclic buzz)
   a<db>           Set voice amplitude in dB (e.g. 'a-8')
   t<a,d,s,r>      Set ADSR envelope (e.g. 't0.002,0.008,0.5,0.01')
   p<pan>          Set stereo pan -1.0 (L) to 1.0 (R), 0.0 = center
@@ -192,9 +194,14 @@ function explainSkodeCommand(cmd, exitCode) {
         2: "Sawtooth",
         4: "Triangle",
         5: "Noise",
-        15: "Analog Saw (w15)",
-        16: "Analog Square (w16)",
-        18: "Analog Triangle (w18)",
+        15: "DWG Strings (w15)",
+        16: "DWG Clarinet (w16)",
+        18: "DWG EPiano (w18)",
+        300: "SID Triangle (w300)",
+        301: "SID Sawtooth (w301)",
+        302: "SID Pulse/Square (w302)",
+        303: "SID Saw+Tri (w303)",
+        304: "SID Saw+Pulse (w304)",
       };
       details.push(`Wave: ${wNames[wId] || `w${wId}`}`);
       sawAction = true;

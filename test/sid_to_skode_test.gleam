@@ -126,8 +126,8 @@ pub fn ring_modulation_and_release_pitch_test() {
   let assert Ok(song) = dump_parser.parse_dump(test_dump, "Hubbard Tune")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Voice 1 uses w18 analog triangle without destructive XM audio-multiplication muting
-  string.contains(res.skode_text, "w18") |> should.be_true
+  // Voice 1 uses w300 Ksynth SID triangle without destructive XM audio-multiplication muting
+  string.contains(res.skode_text, "w300") |> should.be_true
   string.contains(res.skode_text, "XM") |> should.be_false
   string.contains(res.skode_text, "bc6") |> should.be_true
 
@@ -146,21 +146,24 @@ pub fn analog_waveforms_and_headroom_test() {
   let assert Ok(song) = dump_parser.parse_dump(test_dump, "Analog Waves")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Header must use bandlimited analog waveforms and proper headroom
-  string.contains(res.skode_text, "v0 [Voice 1] vt w16 a-8") |> should.be_true
-  string.contains(res.skode_text, "v1 [Voice 2] vt w15 a-8") |> should.be_true
-  string.contains(res.skode_text, "v2 [Voice 3] vt w18 a-8") |> should.be_true
+  // Header must use dedicated Ksynth-modeled SID waveforms and proper headroom
+  string.contains(res.skode_text, "v0 [Voice 1] vt w302 a-8") |> should.be_true
+  string.contains(res.skode_text, "v1 [Voice 2] vt w301 a-8") |> should.be_true
+  string.contains(res.skode_text, "v2 [Voice 3] vt w300 a-8") |> should.be_true
   string.contains(res.skode_text, "V -8") |> should.be_true
+  string.contains(res.skode_text, "k>w300") |> should.be_true
+  string.contains(res.skode_text, "k>w301") |> should.be_true
+  string.contains(res.skode_text, "k>w302") |> should.be_true
 
   // Step commands:
-  // Voice 1 WF 15 (triangle) -> w18
-  string.contains(res.skode_text, "w18") |> should.be_true
-  // Voice 2 WF 43 (pulse) -> w16
-  string.contains(res.skode_text, "w16") |> should.be_true
-  // Voice 3 WF 21 (saw) -> w15
-  string.contains(res.skode_text, "w15") |> should.be_true
-  // Voice 1 WF 80 (noise) -> w5
-  string.contains(res.skode_text, "w5") |> should.be_true
+  // Voice 1 WF 15 (triangle) -> w300
+  string.contains(res.skode_text, "w300") |> should.be_true
+  // Voice 2 WF 43 (pulse) -> w302
+  string.contains(res.skode_text, "w302") |> should.be_true
+  // Voice 3 WF 21 (saw) -> w301
+  string.contains(res.skode_text, "w301") |> should.be_true
+  // Voice 1 WF 80 (noise) -> w6
+  string.contains(res.skode_text, "w6") |> should.be_true
 }
 
 pub fn pulse_width_modulation_test() {
@@ -218,17 +221,17 @@ pub fn voice_panning_test() {
     converter.convert_song(song, types.StereoCustom(-1.0, 1.0, 0.25))
   string.contains(
     res.skode_text,
-    "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p-1.00",
+    "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p-1.00",
   )
   |> should.be_true
   string.contains(
     res.skode_text,
-    "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p1.00",
+    "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p1.00",
   )
   |> should.be_true
   string.contains(
     res.skode_text,
-    "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p0.25",
+    "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p0.25",
   )
   |> should.be_true
 
@@ -248,9 +251,9 @@ pub fn voice_panning_test() {
 }
 
 pub fn combo_waveforms_priority_test() {
-  // Voice 1: WF 31 (Saw + Tri + Gate) -> w15 (Analog Saw)
-  // Voice 2: WF 61 (Saw + Pulse + Gate) -> w15 (Analog Saw)
-  // Voice 3: WF 51 (Tri + Pulse + Gate) -> w16 (Analog Pulse)
+  // Voice 1: WF 31 (Saw + Tri + Gate) -> w303 (SID Combined Saw+Tri hybrid)
+  // Voice 2: WF 61 (Saw + Pulse + Gate) -> w304 (SID Combined Saw+Pulse hybrid)
+  // Voice 3: WF 51 (Tri + Pulse + Gate) -> w302 (SID Pulse)
   let dump =
     "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
 +-------+---------------------------+---------------------------+---------------------------+---------------+
@@ -260,9 +263,9 @@ pub fn combo_waveforms_priority_test() {
   let assert Ok(song) = dump_parser.parse_dump(dump, "Combo Waves")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Must map to clean bandlimited analog waveforms without DC clicks
-  string.contains(res.skode_text, "w15") |> should.be_true
-  string.contains(res.skode_text, "w16") |> should.be_true
+  // Must map to dedicated Ksynth-modeled hybrid waveforms
+  string.contains(res.skode_text, "w303") |> should.be_true
+  string.contains(res.skode_text, "w304") |> should.be_true
 }
 
 pub fn repeated_pitch_gate_retrigger_test() {
@@ -291,4 +294,21 @@ pub fn repeated_pitch_gate_retrigger_test() {
   has_attack_at_0 |> should.be_true
   has_attack_at_2 |> should.be_true
 }
+
+pub fn noise_transition_waveform_test() {
+  // Voice 1 plays Noise (WF 81) on frame 0, then switches to Saw (WF 21) on frame 1
+  let dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | 0800  A-2 95  81 0DFB 180 | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | 0000 00 Off F |
+|     1 | 0800  A-2 95  21 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... ... | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(dump, "Noise Transition")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Voice 1 must emit 'w6' for noise, then switch to 'w301' for saw
+  string.contains(res.skode_text, "w6") |> should.be_true
+  string.contains(res.skode_text, "w301") |> should.be_true
+}
+
 

@@ -166,11 +166,13 @@ fn wave_opcode(wave_byte: Int) -> String {
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    True, _, _, _ -> "w5"
-    _, True, _, _ -> "w15"
-    _, _, True, _ -> "w16"
-    _, _, _, True -> "w18"
-    _, _, _, _ -> "w16"
+    True, _, _, _ -> "w6"
+    _, True, True, _ -> "w304"
+    _, True, False, True -> "w303"
+    _, True, _, _ -> "w301"
+    _, _, True, _ -> "w302"
+    _, _, _, True -> "w300"
+    _, _, _, _ -> "w302"
   }
 }
 
@@ -186,7 +188,10 @@ fn generate_voice_step_tokens(
   // Waveform changed
   let wave_changed = vf.waveform_byte != tracker.last_wave
   let #(tokens, next_wave) = case wave_changed {
-    True -> #([wave_opcode(vf.waveform_byte), ..tokens], vf.waveform_byte)
+    True -> {
+      let op = wave_opcode(vf.waveform_byte)
+      #([op, ..tokens], vf.waveform_byte)
+    }
     False -> #(tokens, tracker.last_wave)
   }
 
@@ -493,6 +498,27 @@ pub fn convert_song_with_options(
         "V -8",
         "M 125 96",
         "",
+        "# --- SID ksynth Oscillator Core ---",
+        "# w300: SID Bandlimited Triangle (odd harmonics 1/h^2, alternating phase)",
+        "[P: ~4096; H: !64; H: H+1; M: s(H*1.5707963); A: (1%(H*H))*M; W: w P $ A] k!",
+        "k>w300",
+        "",
+        "# w301: SID Bandlimited Sawtooth (all harmonics 1/h)",
+        "[P: ~4096; H: !64; H: H+1; A: 1%H; W: w P $ A] k!",
+        "k>w301",
+        "",
+        "# w302: SID Bandlimited Square/Pulse (odd harmonics 1/h + CZ PWM c1)",
+        "[P: ~4096; H: !64; H: H+1; M: a(s(H*1.5707963)); A: (1%H)*M; W: w P $ A] k!",
+        "k>w302",
+        "",
+        "# w303: SID Combined Saw+Triangle ($30 hybrid)",
+        "[P: ~4096; H: !64; H: H+1; As: 1%H; At: (1%(H*H))*s(H*1.5707963); S: P $ As; T: P $ At; W: w (S*0.6)+(T*0.4)] k!",
+        "k>w303",
+        "",
+        "# w304: SID Combined Saw+Pulse ($60 hybrid)",
+        "[P: ~4096; H: !64; H: H+1; As: 1%H; Ap: (1%H)*a(s(H*1.5707963)); S: P $ As; U: P $ Ap; W: w (S*0.5)+(U*0.5)] k!",
+        "k>w304",
+        "",
         "# === INITIALIZATION ===",
         case dac_crunch {
           True ->
@@ -501,9 +527,9 @@ pub fn convert_song_with_options(
             "# S0-S2 clear voice state -- clean 24-bit floating point DSP"
         },
         "S0 S1 S2",
-        "v0 [Voice 1] vt w16 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
-        "v1 [Voice 2] vt w15 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
-        "v2 [Voice 3] vt w18 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
+        "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
+        "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
+        "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
         "",
         "# Tracks setup: modulo 1 = advance 1 step per 50Hz tick",
         "y0 %1",
