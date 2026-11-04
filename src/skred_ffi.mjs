@@ -582,6 +582,13 @@ export function registerFileDrop(callback) {
   }, 100);
 }
 
+function isValidSidBuffer(buffer) {
+  if (!buffer || buffer.byteLength < 32) return false;
+  const view = new Uint8Array(buffer);
+  const magic = String.fromCharCode(view[0], view[1], view[2], view[3]);
+  return magic === "PSID" || magic === "RSID";
+}
+
 export async function runSidDumpWasm(bytes, filename, durationSeconds) {
   try {
     if (!siddumpFactory) {
@@ -593,9 +600,12 @@ export async function runSidDumpWasm(bytes, filename, durationSeconds) {
     const instance = await siddumpFactory({
       locateFile: (p) => {
         if (typeof window !== "undefined") {
-          return new URL("vendor/" + p, window.location.href).href;
+          const basePath = window.location.pathname.endsWith("/")
+            ? window.location.pathname
+            : window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/") + 1);
+          return new URL("./vendor/" + p, window.location.origin + basePath).href;
         }
-        return "/vendor/" + p;
+        return "./public/vendor/" + p;
       },
       noInitialRun: true,
       print: (text) => {
@@ -1170,9 +1180,16 @@ export async function loadDemoSid(
       try {
         const res = await fetch(cand.url);
         if (res.ok) {
-          buf = await res.arrayBuffer();
-          sourceDesc = cand.desc;
-          break;
+          const testBuf = await res.arrayBuffer();
+          if (isValidSidBuffer(testBuf)) {
+            buf = testBuf;
+            sourceDesc = cand.desc;
+            break;
+          } else {
+            console.warn(
+              `[sid-to-skode] Response from ${cand.url} is not a valid SID file (${testBuf.byteLength} bytes). Trying next mirror...`
+            );
+          }
         }
       } catch (e) {
         lastError = e;

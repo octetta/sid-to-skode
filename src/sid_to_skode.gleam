@@ -842,14 +842,21 @@ const featured_demos: List(DemoTune) = [
     "Glider Rider",
     "David Whittaker",
     "glider_rider.sid",
-    "MUSICIANS/W/Whittaker_David/Glider_Rider.sid",
+    "demos/glider_rider.sid",
   ),
   DemoTune(
     "⚡",
     "Eliminator",
     "Jeroen Tel",
     "eliminator.sid",
-    "MUSICIANS/T/Tel_Jeroen/Eliminator.sid",
+    "demos/eliminator.sid",
+  ),
+  DemoTune(
+    "🧙",
+    "Flimbo's Quest",
+    "Johannes Bjerregaard",
+    "flimbos_quest.sid",
+    "demos/flimbos_quest.sid",
   ),
 ]
 
