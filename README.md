@@ -220,13 +220,34 @@ Whenever any featured classic or random online SID is loaded, direct links appea
 
 ---
 
-## Standalone CLI (`cli.gleam`)
+## Standalone CLI (`bin/sid2skode`)
 
-Batch convert `.dump` files directly from your terminal:
+Batch convert Commodore 64 `.sid` files directly into Skode 0.80.0 scripts (`.sk`):
 
 ```bash
-# Convert a dump to a Skode script
-node -e 'import("./build/dev/javascript/sid_to_skode/cli.mjs").then(m => m.main())' demos/commando.dump -o commando.sk
+# Build the CLI executable
+make cli
+
+# Basic conversion (defaults to 210s, headphone stereo, outputs <name>.sk)
+./bin/sid2skode commando.sid
+
+# Specify output file, custom duration, and subtune
+./bin/sid2skode commando.sid -t 120 -a 0 -o commando.sk
+
+# Stereo panning options (mono, headphone, wide)
+./bin/sid2skode giana_sisters.sid --stereo wide -o giana.sk
+
+# Stream Skode script directly to stdout or pipe into other tools
+./bin/sid2skode flimbos_quest.sid -t 60 -o - > flimbo.sk
+
+# Convert existing text register dumps (.dump)
+./bin/sid2skode tune.dump -o tune.sk
+```
+
+You can also run the CLI via npm:
+
+```bash
+npm run cli -- commando.sid -t 90 -o commando.sk
 ```
 
 ---

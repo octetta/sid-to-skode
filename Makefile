@@ -8,11 +8,13 @@ PORT  ?= 3000
 HOST  ?= 0.0.0.0
 export BROWSER ?= firefox
 
-.PHONY: help build dev test check format deps run preview clean start siddump-wasm
+.PHONY: help build dev test check format deps run preview clean start siddump-wasm cli test-cli
 
 help:
 	@echo "sid-to-skode Makefile targets:"
 	@echo "  make help         Show this help message"
+	@echo "  make cli          Build command-line converter (bin/sid2skode)"
+	@echo "  make test-cli     Run verification tests on bin/sid2skode"
 	@echo "  make build        Compile Gleam and build production web bundle into dist/"
 	@echo "  make dev          Start Vite dev server on $(HOST):$(PORT) and open in Firefox"
 	@echo "  make run          Alias for 'make dev'"
@@ -63,3 +65,17 @@ format:
 
 clean:
 	rm -rf dist build/dev
+
+cli:
+	@echo "==> Building CLI executable..."
+	mise exec -- gleam build --target javascript
+	@chmod +x bin/sid2skode bin/sid2skode.mjs
+	@echo "==> CLI executable ready at bin/sid2skode"
+
+test-cli: cli
+	@echo "==> Testing bin/sid2skode with --help..."
+	./bin/sid2skode --help
+	@echo "==> Testing bin/sid2skode conversion on public/demos/commando.sid..."
+	./bin/sid2skode public/demos/commando.sid -t 3 -o /tmp/commando_test.sk
+	@rm -f /tmp/commando_test.sk
+	@echo "==> CLI tests passed!"
