@@ -220,34 +220,28 @@ Whenever any featured classic or random online SID is loaded, direct links appea
 
 ---
 
-## Standalone CLI (`bin/sid2skode`)
+## Standalone Native CLI (`bin/sid2skode`)
 
-Batch convert Commodore 64 `.sid` files directly into Skode 0.80.0 scripts (`.sk`):
+`sid2skode` is a **standalone, zero-dependency native ELF binary** compiled directly with QuickJS and GCC with **direct C linkage** to the 6502/SID emulation core. It has **no runtime dependency on Node.js, npm, or any external interpreters**—just libc/libm on bare metal.
 
 ```bash
-# Build the CLI executable
+# Build the standalone native CLI binary (bin/sid2skode via QuickJS + GCC)
 make cli
 
 # Basic conversion (defaults to 210s, headphone stereo, outputs <name>.sk)
 ./bin/sid2skode commando.sid
 
-# Specify output file, custom duration, and subtune
+# Specify custom duration, subtune, and output file
 ./bin/sid2skode commando.sid -t 120 -a 0 -o commando.sk
 
 # Stereo panning options (mono, headphone, wide)
 ./bin/sid2skode giana_sisters.sid --stereo wide -o giana.sk
 
-# Stream Skode script directly to stdout or pipe into other tools
+# Stream Skode script directly to stdout (useful for Unix piping)
 ./bin/sid2skode flimbos_quest.sid -t 60 -o - > flimbo.sk
 
 # Convert existing text register dumps (.dump)
 ./bin/sid2skode tune.dump -o tune.sk
-```
-
-You can also run the CLI via npm:
-
-```bash
-npm run cli -- commando.sid -t 90 -o commando.sk
 ```
 
 ---

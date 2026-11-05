@@ -1,4 +1,4 @@
-//// Standalone CLI runner for sid-to-skode
+//// Standalone CLI runner for sid-to-skode compiled via QuickJS with direct C linkage
 //// Converts Commodore 64 SID files (.sid) or register dumps (.dump) into Skode 0.80.0 scripts (.sk)
 
 import gleam/float
@@ -22,8 +22,7 @@ fn dump_sid_or_read(
   path: String,
   duration: Int,
   subtune: Int,
-  callback: fn(Result(String, String)) -> Nil,
-) -> Nil
+) -> Result(String, String)
 
 @external(javascript, "./cli_ffi.mjs", "writeTextFile")
 fn write_text_file(path: String, content: String) -> Result(Nil, String)
@@ -133,7 +132,7 @@ fn parse_cli_args(args: List(String), opts: CliOptions) -> CliOptions {
 
 fn print_help() {
   print_stdout(
-    "sid2skode v0.1.0\n"
+    "sid2skode (Gleam Native QuickJS CLI) v0.2.0\n"
     <> "Converts Commodore 64 SID tunes (.sid) or register dumps (.dump) into Skode 0.80.0 scripts\n\n"
     <> "Usage:\n"
     <> "  sid2skode <input.sid|input.dump> [options]\n\n"
@@ -156,7 +155,7 @@ fn print_help() {
 }
 
 fn print_version() {
-  print_stdout("sid2skode v0.1.0 (Skode 0.80.0 target)\n")
+  print_stdout("sid2skode v0.2.0 (Native ELF Binary, Skode 0.80.0 target)\n")
 }
 
 fn format_duration(seconds: Float) -> String {
@@ -253,57 +252,55 @@ pub fn main() {
         True -> Nil
       }
 
-      dump_sid_or_read(in_path, opts.duration, opts.subtune, fn(read_result) {
-        case read_result {
-          Error(err) -> {
-            print_stderr("Error reading/emulating file: " <> err <> "\n")
-            exit_process(1)
-          }
-          Ok(content) -> {
-            let title = in_path
-            case dump_parser.parse_dump(content, title) {
-              Error(parse_err) -> {
-                print_stderr("Parser error: " <> parse_err <> "\n")
-                exit_process(1)
-              }
-              Ok(song) -> {
-                case is_stdout {
-                  False ->
-                    print_stdout(
-                      "==> Parsed "
-                      <> int.to_string(song.frame_count)
-                      <> " frames ("
-                      <> in_path
-                      <> ")\n",
-                    )
-                  True -> Nil
-                }
-
-                case
-                  converter.convert_song_full(
-                    song,
-                    opts.stereo,
-                    opts.dac_crunch,
-                    0.0,
+      case dump_sid_or_read(in_path, opts.duration, opts.subtune) {
+        Error(err) -> {
+          print_stderr("Error reading/emulating file: " <> err <> "\n")
+          exit_process(1)
+        }
+        Ok(content) -> {
+          let title = in_path
+          case dump_parser.parse_dump(content, title) {
+            Error(parse_err) -> {
+              print_stderr("Parser error: " <> parse_err <> "\n")
+              exit_process(1)
+            }
+            Ok(song) -> {
+              case is_stdout {
+                False ->
+                  print_stdout(
+                    "==> Parsed "
+                    <> int.to_string(song.frame_count)
+                    <> " frames ("
+                    <> in_path
+                    <> ")\n",
                   )
-                {
-                  Error(conv_err) -> {
-                    print_stderr("Conversion error: " <> conv_err <> "\n")
-                    exit_process(1)
-                  }
-                  Ok(result) -> {
-                    case opts.output_file {
-                      Some("-") -> {
-                        print_stdout(result.skode_text)
-                        exit_process(0)
-                      }
-                      Some(out_path) -> {
-                        write_output_file(out_path, in_path, song, result)
-                      }
-                      None -> {
-                        let out_path = default_output_filename(in_path)
-                        write_output_file(out_path, in_path, song, result)
-                      }
+                True -> Nil
+              }
+
+              case
+                converter.convert_song_full(
+                  song,
+                  opts.stereo,
+                  opts.dac_crunch,
+                  0.0,
+                )
+              {
+                Error(conv_err) -> {
+                  print_stderr("Conversion error: " <> conv_err <> "\n")
+                  exit_process(1)
+                }
+                Ok(result) -> {
+                  case opts.output_file {
+                    Some("-") -> {
+                      print_stdout(result.skode_text)
+                      exit_process(0)
+                    }
+                    Some(out_path) -> {
+                      write_output_file(out_path, in_path, song, result)
+                    }
+                    None -> {
+                      let out_path = default_output_filename(in_path)
+                      write_output_file(out_path, in_path, song, result)
                     }
                   }
                 }
@@ -311,7 +308,7 @@ pub fn main() {
             }
           }
         }
-      })
+      }
     }
   }
 }

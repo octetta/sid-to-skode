@@ -11,13 +11,8 @@
   "imports": {
     "#vendor/*": "./vendor/*"
   },
-  "bin": {
-    "sid2skode": "./bin/sid2skode.mjs"
-  },
   "scripts": {
     "build:gleam": "gleam build --target javascript",
-    "build:cli": "gleam build --target javascript && chmod +x bin/sid2skode bin/sid2skode.mjs",
-    "cli": "node bin/sid2skode.mjs",
     "build": "gleam build --target javascript && vite build",
     "dev": "gleam build --target javascript && vite --open",
     "preview": "vite preview --open",

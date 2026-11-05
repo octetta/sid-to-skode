@@ -8,6 +8,14 @@ PORT  ?= 3000
 HOST  ?= 0.0.0.0
 export BROWSER ?= firefox
 
+CC    ?= gcc
+ESBUILD ?= npx esbuild
+VENDOR_DIR  := .vendor/quickjs
+CLI_BIN     := bin/sid2skode
+CLI_ENTRY   := build/dev/javascript/sid_to_skode/cli.mjs
+CLI_BUNDLE  := dist/sid2skode.mjs
+CLI_WRAPPER := dist/wrapper.c
+
 .PHONY: help build dev test check format deps run preview clean start siddump-wasm cli test-cli
 
 help:
@@ -66,16 +74,59 @@ format:
 clean:
 	rm -rf dist build/dev
 
-cli:
-	@echo "==> Building CLI executable..."
-	mise exec -- gleam build --target javascript
-	@chmod +x bin/sid2skode bin/sid2skode.mjs
-	@echo "==> CLI executable ready at bin/sid2skode"
+$(VENDOR_DIR)/qjsc:
+	@mkdir -p .vendor
+	@if [ ! -d "$(VENDOR_DIR)" ]; then \
+		echo "==> Cloning QuickJS (no git submodules)..."; \
+		git clone --depth 1 https://github.com/bellard/quickjs.git $(VENDOR_DIR); \
+	fi
+	@echo "==> Compiling QuickJS (qjsc and libquickjs.a)..."
+	$(MAKE) -C $(VENDOR_DIR) qjsc libquickjs.a
 
-test-cli: cli
+$(CLI_BIN): $(VENDOR_DIR)/qjsc
+	@mkdir -p bin dist
+	@echo "==> Compiling Gleam code to JavaScript..."
+	mise exec -- gleam build --target javascript
+	@echo "==> Bundling CLI with esbuild..."
+	$(ESBUILD) $(CLI_ENTRY) \
+		--bundle \
+		--format=esm \
+		--platform=neutral \
+		--external:std \
+		--external:os \
+		--external:siddump_native \
+		--footer:js="main();" \
+		--outfile=$(CLI_BUNDLE)
+	@echo "==> Generating QuickJS C bytecode wrapper..."
+	$(VENDOR_DIR)/qjsc -m -e -M siddump_native,siddump_native -o $(CLI_WRAPPER) $(CLI_BUNDLE)
+	@echo "==> Compiling standalone native CLI executable with direct C linkage (-Os -s)..."
+	$(CC) -Os -s \
+		-I$(VENDOR_DIR) \
+		-Ic_src \
+		-Ic_src/siddump \
+		$(CLI_WRAPPER) \
+		c_src/siddump/siddump.c \
+		c_src/siddump/cpu.c \
+		c_src/siddump_qjs.c \
+		$(VENDOR_DIR)/libquickjs.a \
+		-lm -ldl -o $(CLI_BIN)
+	@echo "==> Standalone native CLI binary ready at $(CLI_BIN):"
+	@ls -lh $(CLI_BIN)
+
+cli: $(CLI_BIN)
+
+test-cli: $(CLI_BIN)
 	@echo "==> Testing bin/sid2skode with --help..."
 	./bin/sid2skode --help
+	@echo "==> Testing bin/sid2skode with --version..."
+	./bin/sid2skode --version
 	@echo "==> Testing bin/sid2skode conversion on public/demos/commando.sid..."
 	./bin/sid2skode public/demos/commando.sid -t 3 -o /tmp/commando_test.sk
+	@head -n 20 /tmp/commando_test.sk
 	@rm -f /tmp/commando_test.sk
-	@echo "==> CLI tests passed!"
+	@echo "==> Testing bin/sid2skode across all 9 demo modules in public/demos/..."
+	@for f in public/demos/*.sid; do \
+		./bin/sid2skode "$$f" -t 2 -o /tmp/test_tune.sk > /dev/null || exit 1; \
+		rm -f /tmp/test_tune.sk; \
+	done
+	@echo "==> All native CLI tests passed successfully!"

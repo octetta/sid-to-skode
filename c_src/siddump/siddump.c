@@ -26,7 +26,12 @@ typedef struct
   unsigned char type;
 } FILTER;
 
-int main(int argc, char **argv);
+#include "siddump.h"
+
+static FILE *siddump_out = NULL;
+#define printf(...) fprintf(siddump_out ? siddump_out : stdout, __VA_ARGS__)
+
+int siddump_run(int argc, char **argv, FILE *out);
 unsigned char readbyte(FILE *f);
 unsigned short readword(FILE *f);
 
@@ -159,8 +164,29 @@ unsigned char freqtblhi[] = {
   0x45,0x49,0x4e,0x52,0x57,0x5c,0x62,0x68,0x6e,0x75,0x7c,0x83,
   0x8b,0x93,0x9c,0xa5,0xaf,0xb9,0xc4,0xd0,0xdd,0xea,0xf8,0xff};
 
-int main(int argc, char **argv)
+static void cleanup_digi_samples(void)
 {
+  for (int i = 0; i < num_digi_samples; i++) {
+    if (digi_samples[i].samples) {
+      free(digi_samples[i].samples);
+      digi_samples[i].samples = NULL;
+    }
+  }
+  num_digi_samples = 0;
+  num_digi_events = 0;
+}
+
+int siddump_run(int argc, char **argv, FILE *out)
+{
+  siddump_out = out;
+  cleanup_digi_samples();
+  memset(&chn, 0, sizeof chn);
+  memset(&filt, 0, sizeof filt);
+  memset(&prevchn, 0, sizeof prevchn);
+  memset(&prevchn2, 0, sizeof prevchn2);
+  memset(&prevfilt, 0, sizeof prevfilt);
+  memset(mem, 0, 0x10000);
+  reset_voice_triggers();
   int subtune = 0;
   int seconds = 60;
   int callsperframe = 1;
@@ -297,7 +323,7 @@ int main(int argc, char **argv)
            "-t<value> Playback time in seconds, default 60\n"
            "-z        Include CPU cycles+rastertime (PAL)+rastertime, badline corrected\n"
            "-8        8580 detection hack\n");
-    return 1;
+    goto error;
   }
 
   // Recalibrate frequencytable
@@ -329,14 +355,14 @@ int main(int argc, char **argv)
   if (!sidname)
   {
     printf("Error: no SID file specified.\n");
-    return 1;
+    goto error;
   }
 
   in = fopen(sidname, "rb");
   if (!in)
   {
     printf("Error: couldn't open SID file.\n");
-    return 1;
+    goto error;
   }
 
   // Read interesting parts of the SID header
@@ -359,7 +385,7 @@ int main(int argc, char **argv)
   {
     printf("Error: SID data continues past end of C64 memory.\n");
     fclose(in);
-    return 1;
+    goto error;
   }
   fread(&mem[loadaddress], loadsize, 1, in);
   fclose(in);
@@ -450,7 +476,7 @@ int main(int argc, char **argv)
         if (instr > MAX_INSTR)
         {
           printf("Error: CPU executed abnormally high amount of instructions in playroutine, exiting\n");
-          return 1;
+          goto error;
         }
         // Test for jump into Kernal interrupt handler exit
         if ((mem[0x01] & 0x07) != 0x5 && (pc == 0xea31 || pc == 0xea81))
@@ -645,7 +671,14 @@ int main(int argc, char **argv)
     frames++;
   }
   print_digi_summary();
+  cleanup_digi_samples();
+  siddump_out = NULL;
   return 0;
+
+error:
+  cleanup_digi_samples();
+  siddump_out = NULL;
+  return 1;
 }
 
 unsigned char readbyte(FILE *f)
@@ -663,6 +696,47 @@ unsigned short readword(FILE *f)
   fread(&res, 2, 1, f);
   return (res[0] << 8) | res[1];
 }
+
+char *siddump_emulate_to_string(const char *filename, int seconds, int subtune)
+{
+  char *out_buf = NULL;
+  size_t out_size = 0;
+  FILE *out = open_memstream(&out_buf, &out_size);
+  if (!out)
+    return NULL;
+
+  char sec_str[32];
+  char sub_str[32];
+  snprintf(sec_str, sizeof(sec_str), "-t%d", seconds > 0 ? seconds : 210);
+  snprintf(sub_str, sizeof(sub_str), "-a%d", subtune >= 0 ? subtune : 0);
+
+  char *argv[] = {
+    "siddump",
+    (char *)filename,
+    sec_str,
+    sub_str,
+    NULL
+  };
+  int argc = 4;
+
+  int ret = siddump_run(argc, argv, out);
+  fclose(out);
+
+  if (ret != 0 && (!out_buf || out_size == 0)) {
+    if (out_buf) free(out_buf);
+    return NULL;
+  }
+
+  return out_buf;
+}
+
+#ifdef SIDDUMP_STANDALONE
+int main(int argc, char **argv)
+{
+  return siddump_run(argc, argv, stdout);
+}
+#endif
+
 
 
 
