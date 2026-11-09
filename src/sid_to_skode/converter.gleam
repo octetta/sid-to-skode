@@ -806,7 +806,7 @@ pub fn convert_song_full(
         True -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; S-1"
         False -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1"
       }
-      let play_cmds = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1"
+      let play_cmds = "?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>"
 
       let end_blocks = [
         "# === PATTERN TRANSITIONS & END OF SONG HOOK ===",

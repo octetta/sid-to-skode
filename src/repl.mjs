@@ -259,13 +259,22 @@ function explainSkodeCommand(cmd, exitCode) {
 export function createReplDom() {
   if (typeof document === "undefined" || replContainer) return;
 
+  const M = (typeof window !== "undefined" && window.Module) || (typeof globalThis !== "undefined" && globalThis.Module);
+  let engineVer = "0.82.0";
+  if (M && typeof M.ccall === "function") {
+    try {
+      const v = M.ccall("skred_version", "string", [], []);
+      if (v) engineVer = v;
+    } catch (e) {}
+  }
+
   const drawer = document.createElement("div");
   drawer.id = "skred-repl-drawer";
   drawer.innerHTML = `
     <div class="repl-header">
       <div class="repl-title">
         <span class="repl-prompt-symbol">&gt;_</span>
-        <span class="repl-title-text">SKRED v0.80.0 REPL</span>
+        <span class="repl-title-text">SKRED v${engineVer} REPL</span>
         <span class="repl-key-badge">Ctrl+~ or Esc</span>
       </div>
       <div class="repl-actions">
@@ -300,7 +309,7 @@ export function createReplDom() {
   // Initial welcome message
   appendReplOutput(
     "system",
-    "Skred v0.80.0 Audio Engine Console — Ready. Type '-help' for REPL guide. Press ↑ / ↓ for history."
+    `Skred v${engineVer} Audio Engine Console — Ready. Type '-help' for REPL guide. Press ↑ / ↓ for history.`
   );
 
   // Wire up close & clear buttons

@@ -285,7 +285,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     EngineStatusChanged(ready) -> {
       let status = case ready {
-        True -> "Skred 0.80.0 WASM engine ready."
+        True -> "Skred 0.82.0 WASM engine ready."
         False -> "Failed to initialize Skred WASM audio engine."
       }
       #(Model(..model, engine_ready: ready, status_text: status), effect.none())
@@ -748,7 +748,7 @@ fn view_header(model: Model) -> Element(Msg) {
         [
           class("engine-status"),
           attribute.title(case model.engine_ready {
-            True -> "Skred 0.80.0 Audio Engine Ready"
+            True -> "Skred 0.82.0 Audio Engine Ready"
             False -> "Loading WASM Audio Engine..."
           }),
         ],

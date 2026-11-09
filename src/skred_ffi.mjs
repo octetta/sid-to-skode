@@ -87,7 +87,7 @@ export function ensureEngineRunning() {
     executeSkredCommand("S-1");
     executeSkredCommand("V" + currentMasterVolume);
     executeSkredCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
-    executeSkredCommand("[play]: ?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1;");
+    executeSkredCommand("[play]: ?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>;");
     flushCommandQueue();
     return engineStarted;
   } catch (err) {
@@ -127,7 +127,7 @@ export function executeSkredCommand(rawCmd) {
     if (trimmed === "stop") {
       cmd = "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;";
     } else if (trimmed === "play") {
-      cmd = "?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1";
+      cmd = "?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>";
     } else if (/^XM\s*(-?\d+)\s*,\s*0/i.test(cmd.trim())) {
       // Skred ring modulation disable requires XM-1, since sv.ring_amount is unused in DSP
       cmd = "XM-1";
@@ -399,8 +399,8 @@ export function playSkode(script, steps, startStep = 0) {
 
   try {
     const playSeqCmd = initialStep > 0
-      ? `?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1; y0 zg ${initialStep}; y1 zg ${initialStep}; y2 zg ${initialStep}; y3 zg ${initialStep}; y127 zg ${initialStep};`
-      : `?ce! /cer 1 Z0 Z! y0 z1 y1 z1 y2 z1 y3 z1 y127 z1`;
+      ? `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>; y0 zg ${initialStep}; y1 zg ${initialStep}; y2 zg ${initialStep}; y3 zg ${initialStep}; y127 zg ${initialStep};`
+      : `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>`;
 
     if (loadedSongScript === script) {
       // Re-playing already loaded song: patterns remain preserved in Skred memory!
