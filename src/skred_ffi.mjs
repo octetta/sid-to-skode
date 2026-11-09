@@ -1,5 +1,5 @@
 // JavaScript FFI Bridge for sid-to-skode
-// Integrates Skred 0.80.0 WASM engine, in-browser siddump WASM, and Web Audio APIs
+// Integrates Skred 0.83.0 WASM engine, in-browser siddump WASM, and Web Audio APIs
 import { createReplDom, toggleRepl, appendReplOutput } from "./repl.mjs";
 
 const win = typeof window !== "undefined" ? window : globalThis;
@@ -348,7 +348,7 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "0.82.0";
+  return "0.83.0";
 }
 
 export function initEngine(callback) {

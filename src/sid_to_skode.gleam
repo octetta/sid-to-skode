@@ -1,7 +1,7 @@
 //// # SID-to-Skode In-Browser Audio Converter & Synthesizer Web Studio
 ////
 //// Runs client-side in the browser, converts Commodore 64 SID register dumps
-//// into Skode 0.80.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
+//// into Skode 0.83.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
 
 import gleam/dict
 import gleam/float
@@ -234,7 +234,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   let model =
     Model(
       engine_ready: False,
-      engine_version: "0.82.0",
+      engine_version: "0.83.0",
       is_playing: False,
       is_paused: False,
       current_step: 0,

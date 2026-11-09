@@ -3,10 +3,10 @@
 [![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](gleam.toml)
 [![Gleam](https://img.shields.io/badge/language-Gleam-ffaff3.svg)](https://gleam.run/)
 [![Lustre](https://img.shields.io/badge/frontend-Lustre-ff69b4.svg)](https://hexdocs.pm/lustre/)
-[![Audio Engine](https://img.shields.io/badge/synth-Skred_0.80.0-38bdf8.svg)](https://github.com/octetta/pulp)
+[![Audio Engine](https://img.shields.io/badge/synth-Skred_0.83.0-38bdf8.svg)](https://github.com/octetta/pulp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 0.80.0** synthesizer and **Skode** live-coding sequencer.
+High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 0.83.0** synthesizer and **Skode** live-coding sequencer.
 
 Available both as a **100% client-side web application** with in-browser 6502 CPU execution, WebAssembly playback, and High Voltage SID Collection streaming, as well as a standalone **native CLI** runner written in pure Gleam.
 
@@ -74,7 +74,7 @@ During the **CodeBEAM 2026 Haarlem Workshop**, Joseph Stewart made a heartfelt a
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   Imperative Shell (JavaScript & WASM)                  │
-│  - Web Audio Context & Skred 0.80.0 multi-threaded synthesizer core    │
+│  - Web Audio Context & Skred 0.83.0 multi-threaded synthesizer core    │
 │  - In-browser 6502 CPU execution via siddump_wasm (no backend servers)  │
 │  - On-the-fly public HVSC fetching via GitHub raw / jsDelivr mirrors   │
 │  - Interactive Skred REPL console drawer (Ctrl+~ / Backquote)          │
@@ -96,7 +96,7 @@ When a `.sid` file is dropped or fetched from the public archive:
 1. The raw binary is loaded into an in-memory virtual filesystem.
 2. `siddump_wasm` executes the file's native 6502 assembly init and play routines for the target duration (e.g. 50 Hz PAL / 20 ms per step).
 3. Every write to the 29 SID hardware registers ($D400–$D41C) is recorded into a structured text stream.
-4. Pure Gleam code parses this stream, performs delta-compression to eliminate redundant writes, and compiles the result into a clean Skode live-coding script (`main.sk`) running in the **Skred 0.80.0** WebAssembly engine.
+4. Pure Gleam code parses this stream, performs delta-compression to eliminate redundant writes, and compiles the result into a clean Skode live-coding script (`main.sk`) running in the **Skred 0.83.0** WebAssembly engine.
 
 ### Where `siddump_wasm` Came From
 

@@ -1,5 +1,5 @@
 //// Standalone CLI runner for sid-to-skode compiled via QuickJS with direct C linkage
-//// Converts Commodore 64 SID files (.sid) or register dumps (.dump) into Skode 0.80.0 scripts (.sk)
+//// Converts Commodore 64 SID files (.sid) or register dumps (.dump) into Skode 0.83.0 scripts (.sk)
 
 import gleam/float
 import gleam/int

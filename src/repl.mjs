@@ -85,7 +85,7 @@ function handleCommand(cmd) {
   if (lower === "-help" || lower === "-?") {
     appendReplOutput(
       "info",
-      `=== SKRED v0.80.1 COMMAND REFERENCE ===
+      `=== SKRED v0.83.0 COMMAND REFERENCE ===
 • Voices & Waves:
   v<0..255>       Select voice (e.g. 'v0')
   w<0..999>       Set waveform:
@@ -260,7 +260,7 @@ export function createReplDom() {
   if (typeof document === "undefined" || replContainer) return;
 
   const M = (typeof window !== "undefined" && window.Module) || (typeof globalThis !== "undefined" && globalThis.Module);
-  let engineVer = "0.82.0";
+  let engineVer = "0.83.0";
   if (M && typeof M.ccall === "function") {
     try {
       const v = M.ccall("skred_version", "string", [], []);
