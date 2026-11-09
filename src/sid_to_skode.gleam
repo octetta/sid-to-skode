@@ -33,7 +33,7 @@ import sid_to_skode/types.{
 // ---------------------------------------------------------------------------
 
 @external(javascript, "./skred_ffi.mjs", "initEngine")
-fn js_init_engine(callback: fn(Bool) -> Nil) -> Nil
+fn js_init_engine(callback: fn(Bool, String) -> Nil) -> Nil
 
 @external(javascript, "./skred_ffi.mjs", "registerFileDrop")
 fn js_register_file_drop(
@@ -122,7 +122,9 @@ fn set_dac_crunch_effect(enabled: Bool) -> Effect(Msg) {
 
 fn init_engine_effect() -> Effect(Msg) {
   effect.from(fn(dispatch) {
-    js_init_engine(fn(success) { dispatch(EngineStatusChanged(success)) })
+    js_init_engine(fn(success, version) {
+      dispatch(EngineStatusChanged(success, version))
+    })
   })
 }
 
@@ -232,6 +234,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   let model =
     Model(
       engine_ready: False,
+      engine_version: "0.82.0",
       is_playing: False,
       is_paused: False,
       current_step: 0,
@@ -283,12 +286,15 @@ fn refresh_conversion_if_needed(model: Model) -> Model {
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    EngineStatusChanged(ready) -> {
+    EngineStatusChanged(ready, version) -> {
       let status = case ready {
-        True -> "Skred 0.82.0 WASM engine ready."
+        True -> "Skred " <> version <> " WASM engine ready."
         False -> "Failed to initialize Skred WASM audio engine."
       }
-      #(Model(..model, engine_ready: ready, status_text: status), effect.none())
+      #(
+        Model(..model, engine_ready: ready, engine_version: version, status_text: status),
+        effect.none(),
+      )
     }
 
     FileDropped(_filename, _data) -> {
@@ -741,6 +747,7 @@ fn view_header(model: Model) -> Element(Msg) {
   html.header([class("app-header")], [
     html.div([class("brand")], [
       html.h1([], [text("SID TO SKODE")]),
+      html.span([class("badge-engine")], [text("Skred v" <> model.engine_version)]),
       html.span([class("brand-tagline")], [text("C64 to Skred Synthesizer")]),
     ]),
     html.div([class("header-controls")], [
@@ -748,7 +755,7 @@ fn view_header(model: Model) -> Element(Msg) {
         [
           class("engine-status"),
           attribute.title(case model.engine_ready {
-            True -> "Skred 0.82.0 Audio Engine Ready"
+            True -> "Skred " <> model.engine_version <> " Audio Engine Ready"
             False -> "Loading WASM Audio Engine..."
           }),
         ],
@@ -999,7 +1006,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
         ]),
         html.p([class("developer-subtitle")], [
           text(
-            "Every converted SID frame maps directly to Skred 0.80.0 synthesis opcodes:",
+            "Every converted SID frame maps directly to Skred synthesis opcodes:",
           ),
         ]),
       ]),
@@ -1022,7 +1029,7 @@ fn view_drop_zone(model: Model) -> Element(Msg) {
       ),
       feature_card(
         "📦 Clean Skode Script",
-        "Produces authentic Skode 0.80.0 scripts ready for instant playback in Skred WASM or download for CLI usage.",
+        "Produces authentic Skode scripts ready for instant playback in Skred WASM or download for CLI usage.",
       ),
     ]),
     html.div([class("welcome-author-bar")], [

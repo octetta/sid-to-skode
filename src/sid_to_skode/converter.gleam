@@ -568,7 +568,7 @@ pub fn convert_song_full(
             "# Converted from: " <> song.title <> " (" <> song.author <> ")",
             "# Frames: " <> int.to_string(frame_count) <> " @ 50.0 Hz (PAL C64)",
             "# Duration: " <> format_duration(duration_seconds),
-            "# Generated for Skred v0.80.0",
+            "# Generated for Skred v0.82.0",
             "# ==============================================================================",
             "",
             "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",

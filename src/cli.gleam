@@ -133,7 +133,7 @@ fn parse_cli_args(args: List(String), opts: CliOptions) -> CliOptions {
 fn print_help() {
   print_stdout(
     "sid2skode (Gleam Native QuickJS CLI) v0.2.0\n"
-    <> "Converts Commodore 64 SID tunes (.sid) or register dumps (.dump) into Skode 0.80.0 scripts\n\n"
+    <> "Converts Commodore 64 SID tunes (.sid) or register dumps (.dump) into Skode scripts\n\n"
     <> "Usage:\n"
     <> "  sid2skode <input.sid|input.dump> [options]\n\n"
     <> "Options:\n"
@@ -155,7 +155,7 @@ fn print_help() {
 }
 
 fn print_version() {
-  print_stdout("sid2skode v0.2.0 (Native ELF Binary, Skode 0.80.0 target)\n")
+  print_stdout("sid2skode v0.2.0 (Native ELF Binary, Skode target)\n")
 }
 
 fn format_duration(seconds: Float) -> String {

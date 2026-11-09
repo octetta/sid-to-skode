@@ -127,6 +127,7 @@ pub type SidCatalogInfo {
 pub type Model {
   Model(
     engine_ready: Bool,
+    engine_version: String,
     is_playing: Bool,
     is_paused: Bool,
     current_step: Int,
@@ -149,7 +150,7 @@ pub type Model {
 }
 
 pub type Msg {
-  EngineStatusChanged(Bool)
+  EngineStatusChanged(ready: Bool, version: String)
   FileDropped(name: String, data: BitArray)
   DumpTextReady(
     name: String,

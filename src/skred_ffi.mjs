@@ -321,9 +321,28 @@ function stopWasmEventPump() {
   }
 }
 
+export function getEngineVersion() {
+  const M = getWasmModule();
+  if (M) {
+    if (typeof M.ccall === "function") {
+      try {
+        const v = M.ccall("skred_version", "string", [], []);
+        if (v) return v;
+      } catch (e) {}
+    }
+    if (typeof M._skred_version === "function" && typeof M.UTF8ToString === "function") {
+      try {
+        const ptr = M._skred_version();
+        if (ptr) return M.UTF8ToString(ptr);
+      } catch (e) {}
+    }
+  }
+  return "0.82.0";
+}
+
 export function initEngine(callback) {
   if (moduleReady) {
-    if (callback) callback(true);
+    if (callback) callback(true, getEngineVersion());
     return;
   }
 
@@ -358,7 +377,7 @@ export function initEngine(callback) {
     console.log("[sid-to-skode] Skred WASM runtime initialized.");
     moduleReady = true;
 
-    if (callback) callback(true);
+    if (callback) callback(true, getEngineVersion());
   };
 
   const prevInit = win.Module.onRuntimeInitialized;
