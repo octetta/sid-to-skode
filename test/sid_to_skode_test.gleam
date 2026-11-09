@@ -367,5 +367,35 @@ pub fn audition_command_formatting_test() {
   live_cmd |> should.equal("v0 p-0.6; v1 p0.6; v2 p0.0")
 }
 
+pub fn hard_sync_polyblep_test() {
+  // Voice 2 (SID Voice 2, Skode v1):
+  // Frame 0: WF 23 (Saw + Sync + Gate). Voice 1 (Skode v0) is its master!
+  // Frame 1: WF 21 (Saw + Gate, Sync OFF). Sync clears!
+  let dump =
+    "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
++-------+---------------------------+---------------------------+---------------------------+---------------+
+|     0 | 0458  C-2 98  21 0800 000 | 08B0  C-3 98  23 0800 000 | ....  ... ..  .. .... ... | .... .. ... . |
+|     1 | ....  ... ..  .. .... ... | ....  ... ..  21 .... ... | ....  ... ..  .. .... ... | .... .. ... . |
+"
+  let assert Ok(song) = dump_parser.parse_dump(dump, "Hard Sync Test")
+  let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
+
+  // Master voice v0 (Track 0) must emit 'HS 1' to reset v1's phase with PolyBLEP
+  let lines = string.split(res.skode_text, "\n")
+  let has_hs_on =
+    list.any(lines, fn(line) {
+      string.contains(line, "HS 1") && string.contains(line, "x0")
+    })
+  has_hs_on |> should.be_true
+
+  // When sync turns off on frame 1, master voice v0 must emit 'HS-1' to disconnect
+  let has_hs_off =
+    list.any(lines, fn(line) {
+      string.contains(line, "HS-1") && string.contains(line, "x1")
+    })
+  has_hs_off |> should.be_true
+}
+
+
 
 

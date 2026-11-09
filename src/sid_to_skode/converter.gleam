@@ -119,6 +119,7 @@ pub type VoiceTracker {
     last_pulse: Int,
     last_gate: Bool,
     last_ring: Bool,
+    last_sync: Bool,
     frames_held: Int,
   )
 }
@@ -131,6 +132,7 @@ pub fn init_tracker() -> VoiceTracker {
     last_pulse: -1,
     last_gate: False,
     last_ring: False,
+    last_sync: False,
     frames_held: 0,
   )
 }
@@ -182,6 +184,8 @@ fn generate_voice_step_tokens(
   vf: VoiceFrame,
   tracker: VoiceTracker,
   _mod_voice: Int,
+  slave_voice: Int,
+  slave_wants_sync: Bool,
 ) -> #(List(String), VoiceTracker) {
   let tokens = []
 
@@ -193,6 +197,20 @@ fn generate_voice_step_tokens(
       #([op, ..tokens], vf.waveform_byte)
     }
     False -> #(tokens, tracker.last_wave)
+  }
+
+  // Hard Sync (HS voice / HS-1)
+  // When slave voice enables sync, this master voice emits 'HS <slave>' to PolyBLEP reset the slave
+  let sync_changed = slave_wants_sync != tracker.last_sync
+  let #(tokens, next_sync) = case sync_changed {
+    True -> {
+      let hs_str = case slave_wants_sync {
+        True -> "HS " <> int.to_string(slave_voice)
+        False -> "HS-1"
+      }
+      #([hs_str, ..tokens], slave_wants_sync)
+    }
+    False -> #(tokens, tracker.last_sync)
   }
 
   // Frequency and Gate transitions
@@ -212,7 +230,6 @@ fn generate_voice_step_tokens(
 
   // ADSR envelope changed
   let adsr_changed = vf.adsr != tracker.last_adsr
-  let next_ring = vf.ring_mod
   let #(tokens, next_adsr) = case adsr_changed {
     True -> {
       let a_sec = lookup_table(sid_attack_table, vf.attack, 0.004)
@@ -294,7 +311,8 @@ fn generate_voice_step_tokens(
       last_adsr: next_adsr,
       last_pulse: next_pulse,
       last_gate: vf.gate,
-      last_ring: next_ring,
+      last_ring: vf.ring_mod,
+      last_sync: next_sync,
       frames_held: next_frames_held,
     )
 
@@ -546,17 +564,35 @@ pub fn convert_song_full(
       let init_voices = case has_digi {
         True -> [
           "S0 S1 S2 S3",
-          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
-          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
-          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
+          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p0
+            <> " HS-1"
+            <> bc_suffix,
+          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p1
+            <> " HS-1"
+            <> bc_suffix,
+          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p2
+            <> " HS-1"
+            <> bc_suffix,
           "v3 [Digi Percussion] vt a-8 f440 t0.001,0.001,1.0,0.001 p"
             <> format_float(sample_pan, 2),
         ]
         False -> [
           "S0 S1 S2",
-          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p" <> p0 <> bc_suffix,
-          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p" <> p1 <> bc_suffix,
-          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p" <> p2 <> bc_suffix,
+          "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p0
+            <> " HS-1"
+            <> bc_suffix,
+          "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p1
+            <> " HS-1"
+            <> bc_suffix,
+          "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
+            <> p2
+            <> " HS-1"
+            <> bc_suffix,
         ]
       }
 
@@ -671,8 +707,9 @@ pub fn convert_song_full(
           // Step 0 must bind voice identity to each track
           let step_str = int.to_string(step_idx)
 
-          // Voice 0 (modulated by V2)
-          let #(toks0, nt0) = generate_voice_step_tokens(frame.v1, t0, 2)
+          // Voice 0 (modulated by V2, master to V1)
+          let #(toks0, nt0) =
+            generate_voice_step_tokens(frame.v1, t0, 2, 1, frame.v2.sync)
           let toks0 = case step_idx == 0 {
             True -> ["v0", ..toks0]
             False -> toks0
@@ -682,8 +719,9 @@ pub fn convert_song_full(
             _ -> ["[" <> string.join(toks0, " ") <> "] x" <> step_str, ..lines0]
           }
 
-          // Voice 1 (modulated by V0)
-          let #(toks1, nt1) = generate_voice_step_tokens(frame.v2, t1, 0)
+          // Voice 1 (modulated by V0, master to V2)
+          let #(toks1, nt1) =
+            generate_voice_step_tokens(frame.v2, t1, 0, 2, frame.v3.sync)
           let toks1 = case step_idx == 0 {
             True -> ["v1", ..toks1]
             False -> toks1
@@ -693,8 +731,9 @@ pub fn convert_song_full(
             _ -> ["[" <> string.join(toks1, " ") <> "] x" <> step_str, ..lines1]
           }
 
-          // Voice 2 (modulated by V1)
-          let #(toks2, nt2) = generate_voice_step_tokens(frame.v3, t2, 1)
+          // Voice 2 (modulated by V1, master to V0)
+          let #(toks2, nt2) =
+            generate_voice_step_tokens(frame.v3, t2, 1, 0, frame.v1.sync)
           let toks2 = case step_idx == 0 {
             True -> ["v2", ..toks2]
             False -> toks2
