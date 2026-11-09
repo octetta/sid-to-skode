@@ -27,6 +27,17 @@ let pumpAnimationId = null;
 let currentEventSubscription = null;
 const commandQueue = [];
 
+export function getAppBaseUrl() {
+  if (typeof window === "undefined") return "/";
+  let path = window.location.pathname;
+  if (/\.[a-zA-Z0-9]+$/.test(path)) {
+    path = path.substring(0, path.lastIndexOf("/") + 1);
+  } else if (!path.endsWith("/")) {
+    path = path + "/";
+  }
+  return new URL(path, window.location.origin).href;
+}
+
 // ---------------------------------------------------------------------------
 // 1. Skred WASM Audio Engine Initialization & Device Management
 // ---------------------------------------------------------------------------
@@ -349,7 +360,7 @@ export function initEngine(callback) {
   win.Module = win.Module || {};
   win.Module.locateFile = function (path) {
     if (typeof window !== "undefined") {
-      return new URL("vendor/skred/" + path, window.location.href).href;
+      return new URL("vendor/skred/" + path, getAppBaseUrl()).href;
     }
     return "/vendor/skred/" + path;
   };
@@ -619,10 +630,7 @@ export async function runSidDumpWasm(bytes, filename, durationSeconds) {
     const instance = await siddumpFactory({
       locateFile: (p) => {
         if (typeof window !== "undefined") {
-          const basePath = window.location.pathname.endsWith("/")
-            ? window.location.pathname
-            : window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/") + 1);
-          return new URL("./vendor/" + p, window.location.origin + basePath).href;
+          return new URL("vendor/" + p, getAppBaseUrl()).href;
         }
         return "./public/vendor/" + p;
       },
@@ -1165,7 +1173,7 @@ export async function loadDemoSid(
       const demoFile = cleanUrl.startsWith("demos/") ? cleanUrl : "demos/" + filename;
       const fallbackDemoUrl =
         typeof window !== "undefined"
-          ? new URL(demoFile, window.location.href).href
+          ? new URL(demoFile, getAppBaseUrl()).href
           : demoFile;
       candidates.push({
         url: fallbackDemoUrl,
