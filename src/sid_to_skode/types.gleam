@@ -66,19 +66,11 @@ pub type FilterFrame {
 }
 
 pub type DigiSample {
-  DigiSample(
-    slot: Int,
-    rate: Float,
-    length: Int,
-    samples: List(Float),
-  )
+  DigiSample(slot: Int, rate: Float, length: Int, samples: List(Float))
 }
 
 pub type DigiEvent {
-  DigiEvent(
-    frame: Int,
-    slot: Int,
-  )
+  DigiEvent(frame: Int, slot: Int)
 }
 
 pub type SidFrame {

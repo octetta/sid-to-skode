@@ -85,7 +85,7 @@ function handleCommand(cmd) {
   if (lower === "-help" || lower === "-?") {
     appendReplOutput(
       "info",
-      `=== SKRED v0.83.0 COMMAND REFERENCE ===
+      `=== SKRED v0.84.0 COMMAND REFERENCE ===
 • Voices & Waves:
   v<0..255>       Select voice (e.g. 'v0')
   w<0..999>       Set waveform:
@@ -96,8 +96,10 @@ function handleCommand(cmd) {
                   w304: Ksynth Combined Saw+Pulse ($60)
                   w6:   Live White Noise (Continuous Hardware Audio RNG, zero cyclic buzz)
   a<db>           Set voice amplitude in dB (e.g. 'a-8')
-  t<a,d,s,r>      Set ADSR envelope (e.g. 't0.002,0.008,0.5,0.01')
+  t<a,d,s,r>      Set ADSR envelope (e.g. 't0.002,0.008,0.5,0.01', 2-arg 't0.01,0.05', or flat 't')
+  g<time[,curve]> Set portamento / glide (or bare 'g' to clear)
   p<pan>          Set stereo pan -1.0 (L) to 1.0 (R), 0.0 = center
+  n<note> / i<n>  Trigger note (MIDI or instrument note)
   f<hz>           Set frequency in Hz (e.g. 'f440')
   l<0|1>          Gate & Attack: l1 = Gate ON (Attack), l0 = Gate OFF (Release)
   c1,<duty>       CZ Phase-Distortion PWM (-0.98 to +0.98, 0.0 = 50% square)
@@ -260,7 +262,7 @@ export function createReplDom() {
   if (typeof document === "undefined" || replContainer) return;
 
   const M = (typeof window !== "undefined" && window.Module) || (typeof globalThis !== "undefined" && globalThis.Module);
-  let engineVer = "0.83.0";
+  let engineVer = "0.84.0";
   if (M && typeof M.ccall === "function") {
     try {
       const v = M.ccall("skred_version", "string", [], []);

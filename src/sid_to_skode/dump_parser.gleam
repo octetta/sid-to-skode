@@ -8,8 +8,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 import sid_to_skode/types.{
   type DigiEvent, type DigiSample, type DumpSong, type FilterFrame,
-  type SidFrame, type VoiceFrame, DigiEvent, DigiSample, DumpSong,
-  FilterFrame, SidFrame, VoiceFrame,
+  type SidFrame, type VoiceFrame, DigiEvent, DigiSample, DumpSong, FilterFrame,
+  SidFrame, VoiceFrame,
 }
 
 pub type ParserState {
@@ -247,21 +247,32 @@ fn parse_line(line: String, state: ParserState) -> Result(ParserState, Nil) {
         |> list.filter(fn(p) { string.length(p) > 0 })
       case parts {
         [slot_str, rate_str, len_str, ..] -> {
-          case
-            int.parse(slot_str),
-            float.parse(rate_str),
-            int.parse(len_str)
-          {
+          case int.parse(slot_str), float.parse(rate_str), int.parse(len_str) {
             Ok(slot), Ok(rate), Ok(len) ->
-              Ok(ParserState(..state, current_sample_meta: Some(#(slot, rate, len))))
+              Ok(
+                ParserState(
+                  ..state,
+                  current_sample_meta: Some(#(slot, rate, len)),
+                ),
+              )
             _, _, _ ->
               // In case rate was formatted as integer like 6842 without decimal point:
-              case int.parse(slot_str), int.parse(rate_str), int.parse(len_str) {
+              case
+                int.parse(slot_str),
+                int.parse(rate_str),
+                int.parse(len_str)
+              {
                 Ok(slot), Ok(rate_i), Ok(len) ->
-                  Ok(ParserState(
-                    ..state,
-                    current_sample_meta: Some(#(slot, int.to_float(rate_i), len)),
-                  ))
+                  Ok(
+                    ParserState(
+                      ..state,
+                      current_sample_meta: Some(#(
+                        slot,
+                        int.to_float(rate_i),
+                        len,
+                      )),
+                    ),
+                  )
                 _, _, _ -> Error(Nil)
               }
           }
@@ -308,10 +319,10 @@ fn parse_line(line: String, state: ParserState) -> Result(ParserState, Nil) {
                   case int.parse(frame_str), int.parse(slot_str) {
                     Ok(fr), Ok(sl) ->
                       Ok(
-                        ParserState(
-                          ..state,
-                          digi_events: [DigiEvent(fr, sl), ..state.digi_events],
-                        ),
+                        ParserState(..state, digi_events: [
+                          DigiEvent(fr, sl),
+                          ..state.digi_events
+                        ]),
                       )
                     _, _ -> Error(Nil)
                   }

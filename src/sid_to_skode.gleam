@@ -1,7 +1,7 @@
 //// # SID-to-Skode In-Browser Audio Converter & Synthesizer Web Studio
 ////
 //// Runs client-side in the browser, converts Commodore 64 SID register dumps
-//// into Skode 0.83.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
+//// into Skode 0.84.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
 
 import gleam/dict
 import gleam/float
@@ -22,10 +22,11 @@ import sid_to_skode/types.{
   type SidFrame, type VoiceFrame, AuditionSample, ConversionFailed,
   CopySkodeClicked, DownloadSkodeClicked, DumpTextReady, EngineStatusChanged,
   FileDropped, FilterFrame, LoadDemo, MasterVolumeChanged, Model, PanicClicked,
-  PauseClicked, PlayClicked, PlaybackEnded, PlaybackStepChanged, RandomSidClicked,
-  ResetClicked, ResumeClicked, SeekStep, SidFrame, StereoCustom, StereoHeadphone,
-  StereoModeChanged, StereoMono, StereoWide, StopClicked, TabSelected,
-  ToggleDacCrunch, ToggleReplClicked, VoiceFrame, VoicePanChanged,
+  PauseClicked, PlayClicked, PlaybackEnded, PlaybackStepChanged,
+  RandomSidClicked, ResetClicked, ResumeClicked, SeekStep, SidFrame,
+  StereoCustom, StereoHeadphone, StereoModeChanged, StereoMono, StereoWide,
+  StopClicked, TabSelected, ToggleDacCrunch, ToggleReplClicked, VoiceFrame,
+  VoicePanChanged,
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +109,11 @@ fn js_audition_sample(slot: Int, script: String, pan: Float) -> Nil
 // Lustre Effects
 // ---------------------------------------------------------------------------
 
-fn audition_sample_effect(slot: Int, script: String, pan: Float) -> Effect(Msg) {
+fn audition_sample_effect(
+  slot: Int,
+  script: String,
+  pan: Float,
+) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_audition_sample(slot, script, pan) })
 }
 
@@ -145,7 +150,11 @@ fn register_playback_listener_effect() -> Effect(Msg) {
   })
 }
 
-fn play_effect(script: String, total_steps: Int, start_step: Int) -> Effect(Msg) {
+fn play_effect(
+  script: String,
+  total_steps: Int,
+  start_step: Int,
+) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_play_skode(script, total_steps, start_step) })
 }
 
@@ -234,7 +243,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   let model =
     Model(
       engine_ready: False,
-      engine_version: "0.83.0",
+      engine_version: "0.84.0",
       is_playing: False,
       is_paused: False,
       current_step: 0,
@@ -292,7 +301,12 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         False -> "Failed to initialize Skred WASM audio engine."
       }
       #(
-        Model(..model, engine_ready: ready, engine_version: version, status_text: status),
+        Model(
+          ..model,
+          engine_ready: ready,
+          engine_version: version,
+          status_text: status,
+        ),
         effect.none(),
       )
     }
@@ -493,7 +507,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Some(conv), Some(song) -> {
           let filename = clean_skode_filename(song.title)
           #(
-            Model(..current_model, status_text: "Downloading " <> filename <> "..."),
+            Model(
+              ..current_model,
+              status_text: "Downloading " <> filename <> "...",
+            ),
             download_file_effect(filename, conv.skode_text),
           )
         }
@@ -505,7 +522,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let current_model = refresh_conversion_if_needed(model)
       case current_model.conversion {
         Some(conv) -> #(
-          Model(..current_model, status_text: "Skode script copied to clipboard!"),
+          Model(
+            ..current_model,
+            status_text: "Skode script copied to clipboard!",
+          ),
           copy_clipboard_effect(conv.skode_text),
         )
         None -> #(current_model, effect.none())
@@ -631,11 +651,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
             <> converter.format_float(clamped, 2)
             <> ")"
           #(
-            Model(
-              ..model,
-              sample_pan: clamped,
-              status_text: status,
-            ),
+            Model(..model, sample_pan: clamped, status_text: status),
             send_command_effect(cmd),
           )
         }
@@ -692,11 +708,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         False -> "🎛️ MOS 6581 DAC Crunch: OFF (clean 24-bit DSP)"
       }
       #(
-        Model(
-          ..model,
-          dac_crunch: next_dac,
-          status_text: status,
-        ),
+        Model(..model, dac_crunch: next_dac, status_text: status),
         set_dac_crunch_effect(next_dac),
       )
     }
@@ -706,10 +718,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Some(conv) -> int.max(0, int.min(step, conv.total_steps - 1))
         None -> int.max(0, step)
       }
-      #(
-        Model(..model, current_step: valid_step),
-        seek_effect(valid_step),
-      )
+      #(Model(..model, current_step: valid_step), seek_effect(valid_step))
     }
   }
 }
@@ -747,7 +756,9 @@ fn view_header(model: Model) -> Element(Msg) {
   html.header([class("app-header")], [
     html.div([class("brand")], [
       html.h1([], [text("SID TO SKODE")]),
-      html.span([class("badge-engine")], [text("Skred v" <> model.engine_version)]),
+      html.span([class("badge-engine")], [
+        text("Skred v" <> model.engine_version),
+      ]),
       html.span([class("brand-tagline")], [text("C64 to Skred Synthesizer")]),
     ]),
     html.div([class("header-controls")], [
@@ -837,13 +848,7 @@ const featured_demos: List(DemoTune) = [
     "ghostbusters_ii.sid",
     "demos/ghostbusters_ii.sid",
   ),
-  DemoTune(
-    "🎖️",
-    "Commando",
-    "Rob Hubbard",
-    "commando.sid",
-    "demos/commando.sid",
-  ),
+  DemoTune("🎖️", "Commando", "Rob Hubbard", "commando.sid", "demos/commando.sid"),
   DemoTune(
     "🛩️",
     "Glider Rider",
@@ -1346,8 +1351,10 @@ fn view_dac_crunch_toggle(model: Model) -> Element(Msg) {
       }),
       event.on_click(ToggleDacCrunch),
       attribute.title(case model.dac_crunch {
-        True -> "MOS 6581 DAC Crunch: ON (bc 6). Click to toggle clean 24-bit DSP."
-        False -> "MOS 6581 DAC Crunch: OFF (bc 0). Click to toggle 6-bit DAC crunch."
+        True ->
+          "MOS 6581 DAC Crunch: ON (bc 6). Click to toggle clean 24-bit DSP."
+        False ->
+          "MOS 6581 DAC Crunch: OFF (bc 0). Click to toggle 6-bit DAC crunch."
       }),
     ],
     [
@@ -1666,7 +1673,9 @@ fn view_tabs_navigation(model: Model, song: DumpSong) -> Element(Msg) {
               _ -> "tab-btn"
             }),
             event.on_click(TabSelected("info")),
-            attribute.title("Tune Metadata, Authorship & Synthesis Architecture"),
+            attribute.title(
+              "Tune Metadata, Authorship & Synthesis Architecture",
+            ),
           ],
           [text("ℹ️ Tune Info")],
         ),
@@ -1788,10 +1797,7 @@ fn view_tab_info(model: Model, song: DumpSong) -> Element(Msg) {
                 let trigger_count =
                   list.filter(song.digi_events, fn(ev) { ev.slot == s.slot })
                   |> list.length
-                let duration_ms =
-                  int.to_float(s.length)
-                  *. 1000.0
-                  /. s.rate
+                let duration_ms = int.to_float(s.length) *. 1000.0 /. s.rate
                 html.tr([], [
                   html.td([class("highlight-cyan")], [
                     text("#" <> int.to_string(s.slot)),
@@ -1941,10 +1947,7 @@ fn view_sample_card(s: DigiSample, song: DumpSong) -> Element(Msg) {
   let trigger_count =
     list.filter(song.digi_events, fn(ev) { ev.slot == s.slot })
     |> list.length
-  let duration_ms =
-    int.to_float(s.length)
-    *. 1000.0
-    /. s.rate
+  let duration_ms = int.to_float(s.length) *. 1000.0 /. s.rate
 
   html.div([class("sample-audition-card")], [
     html.div([class("sample-card-top")], [

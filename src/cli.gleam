@@ -1,5 +1,5 @@
 //// Standalone CLI runner for sid-to-skode compiled via QuickJS with direct C linkage
-//// Converts Commodore 64 SID files (.sid) or register dumps (.dump) into Skode 0.83.0 scripts (.sk)
+//// Converts Commodore 64 SID files (.sid) or register dumps (.dump) into Skode 0.84.0 scripts (.sk)
 
 import gleam/float
 import gleam/int
@@ -333,7 +333,9 @@ fn write_output_file(
         <> int.to_string(result.total_steps)
         <> " steps)\n",
       )
-      print_stdout("==> Duration: " <> format_duration(result.duration_seconds) <> "\n")
+      print_stdout(
+        "==> Duration: " <> format_duration(result.duration_seconds) <> "\n",
+      )
       let digi_count = list.length(song.digi_samples)
       case digi_count > 0 {
         True ->

@@ -395,7 +395,3 @@ pub fn hard_sync_polyblep_test() {
     })
   has_hs_off |> should.be_true
 }
-
-
-
-
