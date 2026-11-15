@@ -5,6 +5,7 @@ import gleeunit/should
 import sid_to_skode/converter
 import sid_to_skode/dump_parser
 import sid_to_skode/types.{StereoHeadphone}
+import skode
 
 pub fn main() {
   gleeunit.main()
@@ -394,4 +395,19 @@ pub fn hard_sync_polyblep_test() {
       string.contains(line, "HS-1") && string.contains(line, "x1")
     })
   has_hs_off |> should.be_true
+
+  // AST parse check on generated SID Skode output
+  let parsed_ops = skode.parse_ops(res.skode_text)
+  { parsed_ops != [] } |> should.be_true
+}
+
+pub fn skode_ast_roundtrip_test() {
+  let ops = skode.parse_ops("v0 w301 f440 a-8 l1 t0.002,0.008,0.5,0.01 g0 HS 1")
+  list.length(ops) |> should.equal(8)
+
+  let src = "v0 n60 l1; [bass] puts; HS ( 0 1 2 )"
+  let prog = skode.parse_program(src)
+  let printed = skode.program_to_string(prog)
+  let reparsed = skode.parse_program(printed)
+  reparsed |> should.equal(prog)
 }
