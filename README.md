@@ -1,6 +1,6 @@
 # sid-to-skode
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](gleam.toml)
+[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](gleam.toml)
 [![Gleam](https://img.shields.io/badge/language-Gleam-ffaff3.svg)](https://gleam.run/)
 [![Lustre](https://img.shields.io/badge/frontend-Lustre-ff69b4.svg)](https://hexdocs.pm/lustre/)
 [![Audio Engine](https://img.shields.io/badge/synth-Skred_0.85.0-38bdf8.svg)](https://github.com/octetta/pulp)
@@ -8,7 +8,7 @@
 
 High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 0.85.0** synthesizer and **Skode** live-coding sequencer.
 
-> **Dogfooding the Skode Ecosystem**: `sid-to-skode` relies directly on the official **[`skode`](https://github.com/octetta/skode)** package (v0.3.0) for typed AST modeling, canonical script serialization, and direct WebAssembly engine dispatch (`skode/transport/wasm`), proving its real-world reliability on demanding 50 Hz Commodore 64 chiptune register streams.
+> **Dogfooding the Skode Ecosystem**: `sid-to-skode` relies directly on the official **[`skode`](https://github.com/octetta/skode)** package (v1.0.0) for typed AST modeling, canonical script serialization, and direct WebAssembly engine dispatch (`skode/transport/wasm`), proving its real-world reliability on demanding 50 Hz Commodore 64 chiptune register streams.
 
 Available both as a **100% client-side web application** with in-browser 6502 CPU execution, WebAssembly playback, and High Voltage SID Collection streaming, as well as a standalone **native CLI** runner written in pure Gleam.
 

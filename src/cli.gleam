@@ -155,7 +155,7 @@ fn print_help() {
 }
 
 fn print_version() {
-  print_stdout("sid2skode v0.2.0 (Native ELF Binary, Skode target)\n")
+  print_stdout("sid2skode v1.0.0 (Native ELF Binary, Skode target)\n")
 }
 
 fn format_duration(seconds: Float) -> String {
