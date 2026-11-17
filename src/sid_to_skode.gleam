@@ -1,7 +1,7 @@
 //// # SID-to-Skode In-Browser Audio Converter & Synthesizer Web Studio
 ////
 //// Runs client-side in the browser, converts Commodore 64 SID register dumps
-//// into Skode 0.84.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
+//// into Skode 0.85.0 scripts, and allows instant playback directly in the Skred WASM audio engine.
 
 import gleam/dict
 import gleam/float
@@ -28,6 +28,8 @@ import sid_to_skode/types.{
   StopClicked, TabSelected, ToggleDacCrunch, ToggleReplClicked, VoiceFrame,
   VoicePanChanged,
 }
+import skode
+import skode/transport/wasm
 
 // ---------------------------------------------------------------------------
 // JavaScript FFI Declarations
@@ -175,11 +177,17 @@ fn stop_effect() -> Effect(Msg) {
 }
 
 fn panic_effect() -> Effect(Msg) {
-  effect.from(fn(_dispatch) { js_panic_engine() })
+  effect.from(fn(_dispatch) {
+    let _ = wasm.send_text("O; DQ; Z0; S-1; Y-1;")
+    js_panic_engine()
+  })
 }
 
 fn send_command_effect(cmd: String) -> Effect(Msg) {
-  effect.from(fn(_dispatch) { js_send_command(cmd) })
+  effect.from(fn(_dispatch) {
+    let _ = wasm.send_text(cmd)
+    js_send_command(cmd)
+  })
 }
 
 fn toggle_repl_effect() -> Effect(Msg) {
@@ -243,7 +251,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
   let model =
     Model(
       engine_ready: False,
-      engine_version: "0.84.0",
+      engine_version: skode.pulp_version,
       is_playing: False,
       is_paused: False,
       current_step: 0,

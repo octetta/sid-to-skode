@@ -1,4 +1,4 @@
-//// Compiles parsed SID dumps into clean, idiomatic Skode 0.84.0 scripts.
+//// Compiles parsed SID dumps into clean, idiomatic Skode 0.85.0 scripts.
 
 import gleam/dict
 import gleam/float
@@ -599,7 +599,7 @@ pub fn convert_song_full(
             "# Converted from: " <> song.title <> " (" <> song.author <> ")",
             "# Frames: " <> int.to_string(frame_count) <> " @ 50.0 Hz (PAL C64)",
             "# Duration: " <> format_duration(duration_seconds),
-            "# Generated for Skred v0.84.0",
+            "# Generated for Skred v0.85.0",
             "# ==============================================================================",
             "",
             "# Master volume and 50 Hz tick rate: (125 BPM * 96 subdivision) / 240 = 50.0 Hz step clock",
@@ -834,7 +834,7 @@ pub fn convert_song_full(
         "",
       ]
 
-      // Stop & Play Macros matching Skred v0.84.0
+      // Stop & Play Macros matching Skred v0.85.0
       let stop_cmds = case has_digi {
         True -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; S-1"
         False -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1"
