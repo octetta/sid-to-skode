@@ -348,7 +348,7 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "0.85.0";
+  return "0.85.1";
 }
 
 export function initEngine(callback) {
