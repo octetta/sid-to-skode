@@ -168,7 +168,7 @@ fn wave_opcode(wave_byte: Int) -> String {
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    True, _, _, _ -> "w6"
+    True, _, _, _ -> "w5"
     _, True, True, _ -> "w304"
     _, True, False, True -> "w303"
     _, True, _, _ -> "w301"

@@ -94,7 +94,7 @@ function handleCommand(cmd) {
                   w302: Ksynth Bandlimited Square / Pulse (SID Pulse/PWM)
                   w303: Ksynth Combined Saw+Triangle ($30)
                   w304: Ksynth Combined Saw+Pulse ($60)
-                  w6:   Live White Noise (Continuous Hardware Audio RNG, zero cyclic buzz)
+                  w5:   Pitched MOS 6581/8580 SID LFSR Noise (23-bit LFSR, 8-bit DAC)
   a<db>           Set voice amplitude in dB (e.g. 'a-8')
   t<a,d,s,r>      Set ADSR envelope (e.g. 't0.002,0.008,0.5,0.01', 2-arg 't0.01,0.05', or flat 't')
   g<time[,curve]> Set portamento / glide (or bare 'g' to clear)

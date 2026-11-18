@@ -163,8 +163,8 @@ pub fn analog_waveforms_and_headroom_test() {
   string.contains(res.skode_text, "w302") |> should.be_true
   // Voice 3 WF 21 (saw) -> w301
   string.contains(res.skode_text, "w301") |> should.be_true
-  // Voice 1 WF 80 (noise) -> w6
-  string.contains(res.skode_text, "w6") |> should.be_true
+  // Voice 1 WF 80 (noise) -> w5
+  string.contains(res.skode_text, "w5") |> should.be_true
 }
 
 pub fn pulse_width_modulation_test() {
@@ -307,8 +307,8 @@ pub fn noise_transition_waveform_test() {
   let assert Ok(song) = dump_parser.parse_dump(dump, "Noise Transition")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Voice 1 must emit 'w6' for noise, then switch to 'w301' for saw
-  string.contains(res.skode_text, "w6") |> should.be_true
+  // Voice 1 must emit 'w5' for noise, then switch to 'w301' for saw
+  string.contains(res.skode_text, "w5") |> should.be_true
   string.contains(res.skode_text, "w301") |> should.be_true
 }
 
@@ -403,7 +403,7 @@ pub fn hard_sync_polyblep_test() {
 
 pub fn skode_ast_roundtrip_test() {
   skode.version |> should.equal("1.0.0")
-  skode.pulp_version |> should.equal("1.0.0")
+  skode.pulp_version |> should.equal("1.2.0")
 
   let ops = skode.parse_ops("v0 w301 f440 a-8 l1 t0.002,0.008,0.5,0.01 g0 HS 1")
   list.length(ops) |> should.equal(8)
