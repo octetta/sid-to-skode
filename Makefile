@@ -16,7 +16,7 @@ CLI_ENTRY   := build/dev/javascript/sid_to_skode/cli.mjs
 CLI_BUNDLE  := dist/sid2skode.mjs
 CLI_WRAPPER := dist/wrapper.c
 
-.PHONY: help build dev test check format deps run preview clean start siddump-wasm cli test-cli
+.PHONY: help build dev test check format deps run preview clean start siddump-wasm cli test-cli update-skred
 
 help:
 	@echo "sid-to-skode Makefile targets:"
@@ -31,9 +31,14 @@ help:
 	@echo "  make check        Verify Gleam types and compilation"
 	@echo "  make format       Format all Gleam source and test files"
 	@echo "  make deps         Download Gleam packages and install npm dependencies"
+	@echo "  make update-skred Pull Skred WASM from github.com/octetta/sk3 (latest or VERSION=x.y.z)"
 	@echo "  make siddump-wasm Compile siddump C source to WebAssembly"
 	@echo "  make preview      Preview production build in dist/ on $(HOST):$(PORT)"
 	@echo "  make clean        Remove build and dist artifacts"
+
+update-skred:
+	@echo "==> Fetching Skred WASM from github.com/octetta/sk3 releases..."
+	./scripts/fetch-skred.sh $(VERSION)
 
 siddump-wasm:
 	@echo "==> Compiling siddump to WebAssembly with emcc..."
