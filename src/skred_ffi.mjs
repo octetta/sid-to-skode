@@ -96,8 +96,8 @@ export function ensureEngineRunning() {
       M._skred_audio_select(1, -2);
     }
     if (typeof M._skred_start === "function") {
-      const res = M._skred_start(128, 256, -1);
-      console.log("[sid-to-skode] _skred_start returned:", res);
+      const res = M._skred_start(2048, 256, -1);
+      console.log("[sid-to-skode] _skred_start (2048 frames buffer) returned:", res);
       engineStarted = (res === 0);
     }
     if (typeof M._skred_logger === "function") {

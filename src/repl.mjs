@@ -24,13 +24,13 @@ export function isReplOpen() {
 
 export function openRepl() {
   if (!replContainer) createReplDom();
-  ensureEngineRunning();
+  if (isOpen) return;
   replContainer.classList.add("active");
   isOpen = true;
   if (replInput) {
-    setTimeout(() => {
-      replInput.focus();
-    }, 50);
+    requestAnimationFrame(() => {
+      replInput.focus({ preventScroll: true });
+    });
   }
 }
 
