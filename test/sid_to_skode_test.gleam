@@ -134,7 +134,7 @@ pub fn ring_modulation_and_release_pitch_test() {
 
   // Release pitch modulation: pitch changes even though gate is off!
   string.contains(res.skode_text, "f45.28") |> should.be_true
-  string.contains(res.skode_text, "[f2636.20] x2") |> should.be_true
+  string.contains(res.skode_text, "[f42179.28] x2") |> should.be_true
 }
 
 pub fn analog_waveforms_and_headroom_test() {
@@ -163,8 +163,8 @@ pub fn analog_waveforms_and_headroom_test() {
   string.contains(res.skode_text, "w302") |> should.be_true
   // Voice 3 WF 21 (saw) -> w301
   string.contains(res.skode_text, "w301") |> should.be_true
-  // Voice 1 WF 80 (noise) -> w6
-  string.contains(res.skode_text, "w6") |> should.be_true
+  // Voice 1 WF 80 (noise) -> w5
+  string.contains(res.skode_text, "w5") |> should.be_true
 }
 
 pub fn pulse_width_modulation_test() {
@@ -307,9 +307,11 @@ pub fn noise_transition_waveform_test() {
   let assert Ok(song) = dump_parser.parse_dump(dump, "Noise Transition")
   let assert Ok(res) = converter.convert_song(song, StereoHeadphone)
 
-  // Voice 1 must emit 'w6' for noise, then switch to 'w301' for saw
-  string.contains(res.skode_text, "w6") |> should.be_true
+  // Voice 1 must emit 'w5' for noise with 16x clock, then switch to 'w301' with 1x clock
+  string.contains(res.skode_text, "w5") |> should.be_true
+  string.contains(res.skode_text, "f1924.42") |> should.be_true
   string.contains(res.skode_text, "w301") |> should.be_true
+  string.contains(res.skode_text, "f120.28") |> should.be_true
 }
 
 pub fn digi_sample_extraction_and_conversion_test() {

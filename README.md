@@ -1,9 +1,9 @@
 # sid-to-skode
 
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](gleam.toml)
+[![Version](https://img.shields.io/badge/version-v1.0.2-blue.svg)](gleam.toml)
 [![Gleam](https://img.shields.io/badge/language-Gleam-ffaff3.svg)](https://gleam.run/)
 [![Lustre](https://img.shields.io/badge/frontend-Lustre-ff69b4.svg)](https://hexdocs.pm/lustre/)
-[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.0.0-38bdf8.svg)](https://github.com/octetta/sk3)
+[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.3.1-38bdf8.svg)](https://github.com/octetta/sk3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 1.0.0** synthesizer and **Skode** live-coding sequencer.
@@ -126,13 +126,13 @@ $$d = \frac{\text{PW} - 2048}{2048.0}$$
 
 Combined with Skred's bandlimited square wave (`w16`), 12-bit PWM sweeps are reproduced with analog warmth and zero digital aliasing.
 
-### 3. Dedicated Ksynth SID Waveforms (`w300`–`w304`) & White Noise (`w6`)
+### 3. Dedicated Ksynth SID Waveforms (`w300`–`w304`) & Authentic 23-bit LFSR Noise (`w5`)
 - **Triangle** $\rightarrow$ `w300`: Ksynth bandlimited triangle wave (odd harmonics $1/h^2$, alternating phase).
 - **Sawtooth** $\rightarrow$ `w301`: Ksynth bandlimited sawtooth wave (64 harmonics $1/h$).
 - **Square / Pulse** $\rightarrow$ `w302`: Ksynth bandlimited square wave with real-time `c1,d` CZ phase-distortion PWM.
 - **Combined Saw+Triangle ($30)** $\rightarrow$ `w303`: Authentic hybrid dual-oscillator shape.
 - **Combined Saw+Pulse ($60)** $\rightarrow$ `w304`: Authentic hybrid dual-oscillator shape.
-- **Noise** $\rightarrow$ `w6`: Continuous hardware audio RNG white noise delivering full 44.1 kHz bandwidth punch for percussion, snare hits, and hi-hats.
+- **Noise** $\rightarrow$ `w5`: 23-bit Galois LFSR pseudo-random noise (`NT 0`). On real MOS 6581/8580 hardware, the noise LFSR shift register is clocked by bit 19 of the 24-bit phase accumulator—running at $16\times$ the fundamental oscillator pitch ($f_{\text{LFSR}} = 16 \times f_{\text{osc}}$). `sid-to-skode` preserves this $16\times$ clocking, reproducing authentic pitch sweeps, tuned toms, explosions, and snare sizzle while maintaining multi-voice hard-sync master tracking in Skred 1.3.1.
 
 ### 4. ADSR Envelope Generators (`t`)
 SID envelope timings map logarithmically to seconds:

@@ -168,7 +168,7 @@ fn wave_opcode(wave_byte: Int) -> String {
   let is_noise = int.bitwise_and(wave_byte, 0x80) != 0
 
   case is_noise, is_saw, is_pulse, is_tri {
-    True, _, _, _ -> "w6"
+    True, _, _, _ -> "w5"
     _, True, True, _ -> "w304"
     _, True, False, True -> "w303"
     _, True, _, _ -> "w301"
@@ -214,16 +214,34 @@ fn generate_voice_step_tokens(
   }
 
   // Frequency and Gate transitions
+  // On real MOS 6581/8580 hardware, the 23-bit noise LFSR is clocked by bit 19 of the 24-bit
+  // accumulator, meaning the noise shift clock runs at 16x the tone oscillator frequency.
+  let is_noise = int.bitwise_and(vf.waveform_byte, 0x80) != 0
+  let was_noise = int.bitwise_and(tracker.last_wave, 0x80) != 0
+  let noise_transition = is_noise != was_noise && tracker.last_wave != -1
+
   let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
   let gate_turned_on =
     { { vf.gate && !tracker.last_gate } || vf.gate_triggered } && vf.freq > 0
   let gate_turned_off = !vf.gate && tracker.last_gate
 
-  // Frequency must ALWAYS be updated whenever pitch changes OR gate turns on!
-  let #(tokens, next_freq) = case gate_turned_on || freq_changed {
+  let effective_freq = case vf.freq > 0 {
+    True -> vf.freq
+    False -> tracker.last_freq
+  }
+  let should_emit_freq =
+    effective_freq > 0 && { gate_turned_on || freq_changed || noise_transition }
+
+  // Frequency must ALWAYS be updated whenever pitch changes, gate turns on, or switching noise/tone!
+  let #(tokens, next_freq) = case should_emit_freq {
     True -> {
-      let f_str = "f" <> format_float(freq_to_hz(vf.freq), 2)
-      #([f_str, ..tokens], vf.freq)
+      let hz_mult = case is_noise {
+        True -> 16.0
+        False -> 1.0
+      }
+      let f_hz = freq_to_hz(effective_freq) *. hz_mult
+      let f_str = "f" <> format_float(f_hz, 2)
+      #([f_str, ..tokens], effective_freq)
     }
     False -> #(tokens, tracker.last_freq)
   }
@@ -561,15 +579,15 @@ pub fn convert_song_full(
           "S0 S1 S2 S3",
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
             <> p0
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
             <> p1
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
             <> p2
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v3 [Digi Percussion] vt a-8 f440 t0.001,0.001,1.0,0.001 p"
             <> format_float(sample_pan, 2),
@@ -578,15 +596,15 @@ pub fn convert_song_full(
           "S0 S1 S2",
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
             <> p0
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
             <> p1
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
             <> p2
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
         ]
       }
