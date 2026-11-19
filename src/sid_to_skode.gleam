@@ -29,7 +29,6 @@ import sid_to_skode/types.{
   VoicePanChanged,
 }
 import skode
-import skode/transport/wasm
 
 // ---------------------------------------------------------------------------
 // JavaScript FFI Declarations
@@ -177,17 +176,11 @@ fn stop_effect() -> Effect(Msg) {
 }
 
 fn panic_effect() -> Effect(Msg) {
-  effect.from(fn(_dispatch) {
-    let _ = wasm.send_text("O; DQ; Z0; S-1; Y-1;")
-    js_panic_engine()
-  })
+  effect.from(fn(_dispatch) { js_panic_engine() })
 }
 
 fn send_command_effect(cmd: String) -> Effect(Msg) {
-  effect.from(fn(_dispatch) {
-    let _ = wasm.send_text(cmd)
-    js_send_command(cmd)
-  })
+  effect.from(fn(_dispatch) { js_send_command(cmd) })
 }
 
 fn toggle_repl_effect() -> Effect(Msg) {
@@ -764,6 +757,9 @@ fn view_header(model: Model) -> Element(Msg) {
   html.header([class("app-header")], [
     html.div([class("brand")], [
       html.h1([], [text("SID TO SKODE")]),
+      html.span([class("badge-version")], [
+        text("Skode v" <> skode.pulp_version),
+      ]),
       html.span([class("badge-engine")], [
         text("Skred v" <> model.engine_version),
       ]),
