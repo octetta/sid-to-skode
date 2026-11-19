@@ -1,5 +1,5 @@
 // JavaScript FFI Bridge for sid-to-skode
-// Integrates Skred 0.85.0 WASM engine, in-browser siddump WASM, and Web Audio APIs
+// Integrates Skred AudioWorklet engine (with ScriptProcessor fallback), in-browser siddump WASM, and Web Audio APIs
 import { createReplDom, toggleRepl, appendReplOutput } from "./repl.mjs";
 
 const win = typeof window !== "undefined" ? window : globalThis;
@@ -18,7 +18,15 @@ let loadedSongScript = null;
 
 let siddumpFactory = null;
 
-// WASM Control Event polling setup
+// Standalone AudioWorklet state
+let workletNode = null;
+let workletAudioContext = null;
+let workletReady = false;
+let useWorklet = false;
+let workletInitAttempted = false;
+let workletInitPromise = null;
+
+// WASM Control Event polling setup (fallback)
 const MAX_EVENTS_BATCH = 64;
 const EVENT_SIZE = 72;
 let wasmEventsBuffer = null;
@@ -39,8 +47,86 @@ export function getAppBaseUrl() {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Skred WASM Audio Engine Initialization & Device Management
+// 1. Skred AudioWorklet Engine & Main-Thread Fallback Initialization
 // ---------------------------------------------------------------------------
+
+export async function initWorkletEngine() {
+  if (workletInitPromise) return workletInitPromise;
+  workletInitAttempted = true;
+
+  workletInitPromise = (async () => {
+    if (typeof window === "undefined" || !window.AudioContext || !window.AudioWorkletNode) {
+      console.log("[sid-to-skode] AudioWorklet not supported in this browser; will use main-thread fallback.");
+      return false;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      workletAudioContext = new AudioCtx({ latencyHint: "interactive" });
+
+      const processorUrl = new URL("vendor/skred/skred_worklet_processor.js?v=1.3.7", getAppBaseUrl()).href;
+      const wasmUrl = new URL("vendor/skred/skred_worklet_engine.wasm?v=1.3.7", getAppBaseUrl()).href;
+
+      console.log("[sid-to-skode] Loading AudioWorklet module:", processorUrl);
+      await workletAudioContext.audioWorklet.addModule(processorUrl);
+
+      console.log("[sid-to-skode] Fetching worklet WASM binary:", wasmUrl);
+      const wasmResp = await fetch(wasmUrl);
+      if (!wasmResp.ok) throw new Error(`HTTP ${wasmResp.status} fetching worklet wasm`);
+      const wasmBinary = await wasmResp.arrayBuffer();
+
+      workletNode = new AudioWorkletNode(workletAudioContext, "skred-worklet-processor", {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        processorOptions: {
+          wasmBinary,
+          sampleRate: workletAudioContext.sampleRate,
+        },
+      });
+
+      workletNode.port.onmessage = (event) => {
+        const data = event.data;
+        if (!data) return;
+        if (data.type === "ready") {
+          console.log(`[sid-to-skode] AudioWorklet Skred engine ready (v${data.version}, ${data.sampleRate}Hz)`);
+          workletReady = true;
+          useWorklet = true;
+          sendWorkletCommand("Z0");
+          sendWorkletCommand("Y-1");
+          sendWorkletCommand("S-1");
+          sendWorkletCommand("V" + currentMasterVolume);
+          sendWorkletCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
+          sendWorkletCommand("[play]: ?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>;");
+        } else if (data.type === "events") {
+          processBatchEvents(data.events);
+        } else if (data.type === "log") {
+          if (data.text) {
+            appendReplOutput("out", data.text);
+          }
+        } else if (data.type === "error") {
+          console.error("[sid-to-skode] AudioWorklet processor error:", data.error);
+        }
+      };
+
+      workletNode.connect(workletAudioContext.destination);
+      useWorklet = true;
+      return true;
+    } catch (err) {
+      console.warn("[sid-to-skode] AudioWorklet init failed, falling back to ScriptProcessor/miniaudio:", err);
+      useWorklet = false;
+      return false;
+    }
+  })();
+
+  return workletInitPromise;
+}
+
+function sendWorkletCommand(cmd) {
+  if (workletNode && workletNode.port) {
+    workletNode.port.postMessage({ type: "cmd", text: cmd });
+  }
+}
 
 function getWasmModule() {
   if (win.Module && (typeof win.Module.ccall === "function" || typeof win.Module._skred_start === "function")) {
@@ -50,6 +136,9 @@ function getWasmModule() {
 }
 
 function ensureAudioContext() {
+  if (useWorklet && workletAudioContext && workletAudioContext.state === "suspended") {
+    workletAudioContext.resume().catch(() => {});
+  }
   const M = win.Module;
   if (M && M.audioContext && M.audioContext.state === "suspended") {
     M.audioContext.resume().catch(() => {});
@@ -77,9 +166,12 @@ function ensureAudioContext() {
 }
 
 export function ensureEngineRunning() {
+  ensureAudioContext();
+  if (useWorklet && workletNode) {
+    return true;
+  }
   const M = getWasmModule();
   if (!M) return false;
-  ensureAudioContext();
   if (typeof M._skred_audio_running === "function" && M._skred_audio_running()) {
     return true;
   }
@@ -141,7 +233,7 @@ if (typeof win.addEventListener === "function") {
   win.addEventListener("click", unlockAudio, { passive: true });
 }
 
-export function executeSkredCommand(rawCmd) {
+function normalizeCommand(rawCmd) {
   let cmd = rawCmd;
   if (typeof cmd === "string") {
     const trimmed = cmd.trim().toLowerCase();
@@ -170,6 +262,17 @@ export function executeSkredCommand(rawCmd) {
         }
       );
     }
+  }
+  return cmd;
+}
+
+export function executeSkredCommand(rawCmd) {
+  const cmd = normalizeCommand(rawCmd);
+
+  if (useWorklet && workletNode) {
+    ensureAudioContext();
+    workletNode.port.postMessage({ type: "cmd", text: cmd });
+    return 0;
   }
 
   const M = getWasmModule();
@@ -251,7 +354,60 @@ function flushCommandQueue() {
   }
 }
 
+function processBatchEvents(events) {
+  if (!events || events.length === 0) return;
+  for (let i = 0; i < events.length; i++) {
+    const { t, p, s, id } = events[i];
+
+    // Real-time Step Tracking: event type 9 (SKRED_CONTROL_EVENT_PATTERN_STEP) on pattern 0
+    if (isPlaybackActive && t === 9 && p === 0) {
+      if (s !== lastReportedStep && s >= 0) {
+        if (
+          (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) ||
+          (activeSongTotalSteps > 0 && s >= activeSongTotalSteps - 1)
+        ) {
+          if (isLoopEnabled) {
+            lastReportedStep = 0;
+            executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
+            if (playbackStepCallback) {
+              playbackStepCallback(0, activeSongTotalSteps);
+            }
+            return;
+          }
+          stopPlayback();
+          if (playbackEndedCallback) playbackEndedCallback();
+          return;
+        }
+        lastReportedStep = s;
+        if (playbackStepCallback) {
+          playbackStepCallback(s, activeSongTotalSteps);
+        }
+      }
+    }
+
+    // Song Completion: explicit end-of-song marker event 4 (USER id 127)
+    if (isPlaybackActive && t === 4 && id === 127) {
+      if (isLoopEnabled) {
+        lastReportedStep = 0;
+        executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
+        if (playbackStepCallback) {
+          playbackStepCallback(0, activeSongTotalSteps);
+        }
+        return;
+      }
+      stopPlayback();
+      if (playbackEndedCallback) playbackEndedCallback();
+      return;
+    }
+  }
+
+  if (currentEventSubscription) {
+    currentEventSubscription(events);
+  }
+}
+
 function startWasmEventPump(M) {
+  if (useWorklet) return;
   if (!M || typeof M._skred_control_event_poll !== "function") return;
   if (!wasmEventsBuffer && typeof M._malloc === "function") {
     wasmEventsBuffer = M._malloc(MAX_EVENTS_BATCH * EVENT_SIZE);
@@ -260,7 +416,7 @@ function startWasmEventPump(M) {
   eventPumpRunning = true;
 
   function pump() {
-    if (!isPlaybackActive) {
+    if (!isPlaybackActive || useWorklet) {
       eventPumpRunning = false;
       pumpAnimationId = null;
       return;
@@ -295,51 +451,8 @@ function startWasmEventPump(M) {
               view.getFloat64(base + 64, true),
             ];
             events.push({ t, opcode, sample, seq, v, p, s, tag, id, value_count, vals });
-
-            // Real-time Step Tracking: event type 9 (SKRED_CONTROL_EVENT_PATTERN_STEP) on pattern 0
-            if (isPlaybackActive && t === 9 && p === 0) {
-              if (s !== lastReportedStep && s >= 0) {
-                if (
-                  (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) ||
-                  (activeSongTotalSteps > 0 && s >= activeSongTotalSteps - 1)
-                ) {
-                  if (isLoopEnabled) {
-                    lastReportedStep = 0;
-                    executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
-                    if (playbackStepCallback) {
-                      playbackStepCallback(0, activeSongTotalSteps);
-                    }
-                    return;
-                  }
-                  stopPlayback();
-                  if (playbackEndedCallback) playbackEndedCallback();
-                  return;
-                }
-                lastReportedStep = s;
-                if (playbackStepCallback) {
-                  playbackStepCallback(s, activeSongTotalSteps);
-                }
-              }
-            }
-
-            // Song Completion: explicit end-of-song marker event 4 (USER id 127)
-            if (isPlaybackActive && t === 4 && id === 127) {
-              if (isLoopEnabled) {
-                lastReportedStep = 0;
-                executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
-                if (playbackStepCallback) {
-                  playbackStepCallback(0, activeSongTotalSteps);
-                }
-                return;
-              }
-              stopPlayback();
-              if (playbackEndedCallback) playbackEndedCallback();
-              return;
-            }
           }
-          if (currentEventSubscription) {
-            currentEventSubscription(events);
-          }
+          processBatchEvents(events);
         }
       } catch (err) {
         console.error("[sid-to-skode] Event pump error:", err);
@@ -369,6 +482,9 @@ export function getLoopEnabled() {
 }
 
 export function getEngineVersion() {
+  if (useWorklet && workletReady) {
+    return "1.3.7";
+  }
   const M = getWasmModule();
   if (M) {
     if (typeof M.ccall === "function") {
@@ -384,24 +500,39 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "1.3.6";
+  return "1.3.7";
 }
 
 export function initEngine(callback) {
-  if (moduleReady) {
+  if (moduleReady || (useWorklet && workletReady)) {
     if (callback) callback(true, getEngineVersion());
     return;
+  }
+
+  createReplDom();
+
+  // Concurrently attempt AudioWorklet initialization
+  if (typeof window !== "undefined" && window.AudioContext && window.AudioWorkletNode) {
+    initWorkletEngine().then((success) => {
+      if (success) {
+        console.log("[sid-to-skode] AudioWorklet engine initialized successfully!");
+        if (callback && !moduleReady) {
+          moduleReady = true;
+          callback(true, getEngineVersion());
+        }
+      }
+    }).catch((err) => {
+      console.warn("[sid-to-skode] AudioWorklet init error, using fallback:", err);
+    });
   }
 
   win.Module = win.Module || {};
   win.Module.locateFile = function (path) {
     if (typeof window !== "undefined") {
-      return new URL("vendor/skred/" + path + "?v=1.3.6", getAppBaseUrl()).href;
+      return new URL("vendor/skred/" + path + "?v=1.3.7", getAppBaseUrl()).href;
     }
-    return "/vendor/skred/" + path + "?v=1.3.6";
+    return "/vendor/skred/" + path + "?v=1.3.7";
   };
-
-  createReplDom();
 
   const prevPrint = win.Module.print;
   win.Module.print = function (text) {
@@ -455,8 +586,26 @@ export function playSkode(script, steps, startStep = 0) {
 
   unlockAudio();
   ensureAudioContext();
-  ensureEngineRunning();
 
+  const playSeqCmd = initialStep > 0
+    ? `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>; y0 zg ${initialStep}; y1 zg ${initialStep}; y2 zg ${initialStep}; y3 zg ${initialStep}; y127 zg ${initialStep};`
+    : `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>`;
+
+  if (useWorklet && workletNode) {
+    if (loadedSongScript === script) {
+      executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1;");
+      executeSkredCommand("V" + currentMasterVolume);
+      executeSkredCommand(playSeqCmd);
+    } else {
+      executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
+      const followUp = "[song.sk] /ls; y0 yc1; y1 yc1; y2 yc1; y3 yc1; V" + currentMasterVolume + "; " + playSeqCmd;
+      workletNode.port.postMessage({ type: "script", script, cmd: followUp });
+      loadedSongScript = script;
+    }
+    return;
+  }
+
+  ensureEngineRunning();
   const M = getWasmModule();
   if (!M) {
     console.warn("[sid-to-skode] WASM module not ready for playback.");
@@ -464,10 +613,6 @@ export function playSkode(script, steps, startStep = 0) {
   }
 
   try {
-    const playSeqCmd = initialStep > 0
-      ? `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>; y0 zg ${initialStep}; y1 zg ${initialStep}; y2 zg ${initialStep}; y3 zg ${initialStep}; y127 zg ${initialStep};`
-      : `?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>`;
-
     if (loadedSongScript === script) {
       // Re-playing already loaded song: patterns remain preserved in Skred memory!
       executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1;");
@@ -501,7 +646,12 @@ export function playSkode(script, steps, startStep = 0) {
 export function pausePlayback() {
   if (!isPlaybackActive) return;
   isPlaybackPaused = true;
-  stopWasmEventPump();
+  if (!useWorklet) {
+    stopWasmEventPump();
+  }
+  if (useWorklet && workletAudioContext && workletAudioContext.state === "running") {
+    workletAudioContext.suspend().catch(() => {});
+  }
   const M = win.Module;
   if (M && M.audioContext && M.audioContext.state === "running") {
     M.audioContext.suspend().catch(() => {});
@@ -514,15 +664,19 @@ export function resumePlayback() {
   isPlaybackPaused = false;
   ensureAudioContext();
   executeSkredCommand("Z3");
-  const M = getWasmModule();
-  if (M) startWasmEventPump(M);
+  if (!useWorklet) {
+    const M = getWasmModule();
+    if (M) startWasmEventPump(M);
+  }
 }
 
 export function stopPlayback() {
   isPlaybackActive = false;
   isPlaybackPaused = false;
   lastReportedStep = -1;
-  stopWasmEventPump();
+  if (!useWorklet) {
+    stopWasmEventPump();
+  }
   ensureAudioContext();
   executeSkredCommand("/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; v3 l0; v4 l0; v5 l0; v6 l0; v7 l0; S-1; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
 }
@@ -538,19 +692,23 @@ let nextAuditionVoice = 4;
 export function auditionSample(slot, script, samplePan = 0.0) {
   ensureAudioContext();
   ensureEngineRunning();
-  const M = getWasmModule();
-  if (!M) return;
 
   // If the script with wavetable definitions has not been loaded into Skred yet, load it now:
   if (script && loadedSongScript !== script) {
-    if (M.FS) {
-      try { M.FS.writeFile("/song.sk", script); } catch (e) {}
-      try { M.FS.writeFile("song.sk", script); } catch (e) {}
-      executeSkredCommand("[song.sk] /ls");
+    if (useWorklet && workletNode) {
+      const followUp = "[song.sk] /ls; y0 yc1; y1 yc1; y2 yc1; y3 yc1;";
+      workletNode.port.postMessage({ type: "script", script, cmd: followUp });
     } else {
-      executeSkredCommand(script);
+      const M = getWasmModule();
+      if (M && M.FS) {
+        try { M.FS.writeFile("/song.sk", script); } catch (e) {}
+        try { M.FS.writeFile("song.sk", script); } catch (e) {}
+        executeSkredCommand("[song.sk] /ls");
+      } else {
+        executeSkredCommand(script);
+      }
+      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
     }
-    executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
     loadedSongScript = script;
   }
 
