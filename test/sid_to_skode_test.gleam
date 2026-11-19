@@ -100,6 +100,7 @@ pub fn realtime_filter_automation_test() {
   string.contains(res.skode_text, "j1") |> should.be_true
   string.contains(res.skode_text, "k5969.2") |> should.be_true
   string.contains(res.skode_text, "q1.13") |> should.be_true
+  string.contains(res.skode_text, "jd0.7") |> should.be_true
   string.contains(res.skode_text, "k8938.8") |> should.be_true
   string.contains(res.skode_text, "j0") |> should.be_true
 
@@ -405,7 +406,7 @@ pub fn hard_sync_polyblep_test() {
 
 pub fn skode_ast_roundtrip_test() {
   skode.version |> should.equal("1.0.0")
-  skode.pulp_version |> should.equal("1.3.3")
+  skode.pulp_version |> should.equal("1.3.4")
 
   let ops = skode.parse_ops("v0 w301 f440 a-8 l1 t0.002,0.008,0.5,0.01 g0 HS 1")
   list.length(ops) |> should.equal(8)

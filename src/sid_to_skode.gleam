@@ -25,8 +25,8 @@ import sid_to_skode/types.{
   PauseClicked, PlayClicked, PlaybackEnded, PlaybackStepChanged,
   RandomSidClicked, ResetClicked, ResumeClicked, SeekStep, SidFrame,
   StereoCustom, StereoHeadphone, StereoModeChanged, StereoMono, StereoWide,
-  StopClicked, TabSelected, ToggleDacCrunch, ToggleReplClicked, VoiceFrame,
-  VoicePanChanged,
+  StopClicked, TabSelected, ToggleDacCrunch, ToggleLoop, ToggleReplClicked,
+  VoiceFrame, VoicePanChanged,
 }
 import skode
 
@@ -100,6 +100,9 @@ fn js_download_file(filename: String, content: String) -> Nil
 @external(javascript, "./skred_ffi.mjs", "seekToStep")
 fn js_seek_to_step(step: Int) -> Nil
 
+@external(javascript, "./skred_ffi.mjs", "setLoopEnabled")
+fn js_set_loop_enabled(enabled: Bool) -> Nil
+
 @external(javascript, "./skred_ffi.mjs", "setDacCrunch")
 fn js_set_dac_crunch(enabled: Bool) -> Nil
 
@@ -124,6 +127,10 @@ fn seek_effect(step: Int) -> Effect(Msg) {
 
 fn set_dac_crunch_effect(enabled: Bool) -> Effect(Msg) {
   effect.from(fn(_dispatch) { js_set_dac_crunch(enabled) })
+}
+
+fn set_loop_effect(enabled: Bool) -> Effect(Msg) {
+  effect.from(fn(_dispatch) { js_set_loop_enabled(enabled) })
 }
 
 fn init_engine_effect() -> Effect(Msg) {
@@ -247,6 +254,7 @@ pub fn init(_) -> #(Model, Effect(Msg)) {
       engine_version: skode.pulp_version,
       is_playing: False,
       is_paused: False,
+      is_looping: True,
       current_step: 0,
       active_song: None,
       conversion: None,
@@ -375,6 +383,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
                 "" -> filename
                 t -> t
               }
+              let next_tab = case
+                model.active_tab == "samples"
+                && list.is_empty(song.digi_samples)
+              {
+                True -> "voices"
+                False -> model.active_tab
+              }
               #(
                 Model(
                   ..model,
@@ -387,6 +402,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
                   is_playing: False,
                   is_paused: False,
                   current_step: 0,
+                  active_tab: next_tab,
                   error_message: None,
                   status_text: "Loaded \""
                     <> title
@@ -503,34 +519,44 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     DownloadSkodeClicked -> {
-      let current_model = refresh_conversion_if_needed(model)
-      case current_model.conversion, current_model.active_song {
+      case model.conversion, model.active_song {
         Some(conv), Some(song) -> {
           let filename = clean_skode_filename(song.title)
           #(
             Model(
-              ..current_model,
+              ..model,
               status_text: "Downloading " <> filename <> "...",
             ),
             download_file_effect(filename, conv.skode_text),
           )
         }
-        _, _ -> #(current_model, effect.none())
+        _, _ -> #(model, effect.none())
       }
     }
 
     CopySkodeClicked -> {
-      let current_model = refresh_conversion_if_needed(model)
-      case current_model.conversion {
+      case model.conversion {
         Some(conv) -> #(
           Model(
-            ..current_model,
+            ..model,
             status_text: "Skode script copied to clipboard!",
           ),
           copy_clipboard_effect(conv.skode_text),
         )
-        None -> #(current_model, effect.none())
+        None -> #(model, effect.none())
       }
+    }
+
+    ToggleLoop -> {
+      let next_loop = !model.is_looping
+      let status = case next_loop {
+        True -> "Seamless looping enabled."
+        False -> "Single-play mode enabled (stops at end)."
+      }
+      #(
+        Model(..model, is_looping: next_loop, status_text: status),
+        set_loop_effect(next_loop),
+      )
     }
 
     ResetClicked -> {
@@ -557,11 +583,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     TabSelected(tab) -> {
-      let current_model = case tab {
-        "skode" -> refresh_conversion_if_needed(model)
-        _ -> model
-      }
-      #(Model(..current_model, active_tab: tab), effect.none())
+      #(Model(..model, active_tab: tab), effect.none())
     }
 
     AuditionSample(slot) -> {
@@ -817,6 +839,20 @@ pub type DemoTune {
 }
 
 const featured_demos: List(DemoTune) = [
+  DemoTune(
+    "🚀",
+    "Delta (Filter Sweeps)",
+    "Rob Hubbard",
+    "delta.sid",
+    "demos/delta.sid",
+  ),
+  DemoTune(
+    "⚔️",
+    "Myth (L+B Combined Filter)",
+    "Jeroen Tel",
+    "myth.sid",
+    "demos/myth.sid",
+  ),
   DemoTune(
     "🥁",
     "Great Giana Sisters (Digi)",
@@ -1311,6 +1347,25 @@ fn view_transport_bar(model: Model, song: DumpSong) -> Element(Msg) {
         stop_btn,
         html.button(
           [
+            class(case model.is_looping {
+              True -> "btn btn-outline btn-loop active btn-transport"
+              False -> "btn btn-outline btn-transport"
+            }),
+            event.on_click(ToggleLoop),
+            attribute.title(case model.is_looping {
+              True -> "Loop: ON (seamless replay). Click to play once."
+              False -> "Loop: OFF (stops at end). Click to loop."
+            }),
+          ],
+          [
+            text(case model.is_looping {
+              True -> "🔁 Loop"
+              False -> "➡️ Once"
+            }),
+          ],
+        ),
+        html.button(
+          [
             class("btn btn-outline btn-transport"),
             event.on_click(DownloadSkodeClicked),
             attribute.disabled(model.conversion == None),
@@ -1673,19 +1728,6 @@ fn view_tabs_navigation(model: Model, song: DumpSong) -> Element(Msg) {
         html.button(
           [
             class(case model.active_tab {
-              "info" -> "tab-btn active"
-              _ -> "tab-btn"
-            }),
-            event.on_click(TabSelected("info")),
-            attribute.title(
-              "Tune Metadata, Authorship & Synthesis Architecture",
-            ),
-          ],
-          [text("ℹ️ Tune Info")],
-        ),
-        html.button(
-          [
-            class(case model.active_tab {
               "skode" -> "tab-btn active"
               _ -> "tab-btn"
             }),
@@ -1704,6 +1746,19 @@ fn view_tabs_navigation(model: Model, song: DumpSong) -> Element(Msg) {
             attribute.title("Raw 50Hz SID Register Dump Text"),
           ],
           [text("📑 Raw SID Dump")],
+        ),
+        html.button(
+          [
+            class(case model.active_tab {
+              "info" -> "tab-btn active"
+              _ -> "tab-btn"
+            }),
+            event.on_click(TabSelected("info")),
+            attribute.title(
+              "Tune Metadata, Authorship & Synthesis Architecture",
+            ),
+          ],
+          [text("ℹ️ Tune Info")],
         ),
       ],
     ]),
@@ -2313,7 +2368,7 @@ fn view_tab_skode(model: Model) -> Element(Msg) {
           ]),
         ]),
         html.pre([class("code-preview-block")], [
-          html.code([], [text(truncate_preview_lines(conv.skode_text, 400))]),
+          html.code([], [text(truncate_preview_lines(conv.skode_text, 1500))]),
         ]),
       ])
     }
@@ -2330,7 +2385,7 @@ fn view_tab_dump(model: Model) -> Element(Msg) {
       html.span([class("viewer-filename")], [text("siddump.txt")]),
     ]),
     html.pre([class("code-preview-block")], [
-      html.code([], [text(truncate_preview_lines(model.raw_dump_text, 400))]),
+      html.code([], [text(truncate_preview_lines(model.raw_dump_text, 1500))]),
     ]),
   ])
 }

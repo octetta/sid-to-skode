@@ -293,6 +293,14 @@ function startWasmEventPump(M) {
                   (lastReportedStep >= activeSongTotalSteps - 2 && s === 0 && activeSongTotalSteps > 2) ||
                   (activeSongTotalSteps > 0 && s >= activeSongTotalSteps - 1)
                 ) {
+                  if (isLoopEnabled) {
+                    lastReportedStep = 0;
+                    executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
+                    if (playbackStepCallback) {
+                      playbackStepCallback(0, activeSongTotalSteps);
+                    }
+                    return;
+                  }
                   stopPlayback();
                   if (playbackEndedCallback) playbackEndedCallback();
                   return;
@@ -306,6 +314,14 @@ function startWasmEventPump(M) {
 
             // Song Completion: explicit end-of-song marker event 4 (USER id 127)
             if (isPlaybackActive && t === 4 && id === 127) {
+              if (isLoopEnabled) {
+                lastReportedStep = 0;
+                executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
+                if (playbackStepCallback) {
+                  playbackStepCallback(0, activeSongTotalSteps);
+                }
+                return;
+              }
               stopPlayback();
               if (playbackEndedCallback) playbackEndedCallback();
               return;
@@ -332,6 +348,16 @@ function stopWasmEventPump() {
   }
 }
 
+let isLoopEnabled = true;
+
+export function setLoopEnabled(enabled) {
+  isLoopEnabled = !!enabled;
+}
+
+export function getLoopEnabled() {
+  return isLoopEnabled;
+}
+
 export function getEngineVersion() {
   const M = getWasmModule();
   if (M) {
@@ -348,7 +374,7 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "1.3.3";
+  return "1.3.4";
 }
 
 export function initEngine(callback) {
@@ -360,9 +386,9 @@ export function initEngine(callback) {
   win.Module = win.Module || {};
   win.Module.locateFile = function (path) {
     if (typeof window !== "undefined") {
-      return new URL("vendor/skred/" + path + "?v=1.3.3", getAppBaseUrl()).href;
+      return new URL("vendor/skred/" + path + "?v=1.3.4", getAppBaseUrl()).href;
     }
-    return "/vendor/skred/" + path + "?v=1.3.3";
+    return "/vendor/skred/" + path + "?v=1.3.4";
   };
 
   createReplDom();
@@ -564,7 +590,7 @@ export function registerFileDrop(callback) {
     try {
       const buffer = await file.arrayBuffer();
       if (name.toLowerCase().endsWith(".sid")) {
-        const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name, 210);
+        const dumpText = await runSidDumpWasm(new Uint8Array(buffer), name, 240);
         if (dumpText && callback) {
           callback(name, dumpText, "📁 Local File Drop: " + name, "");
         }
@@ -875,7 +901,7 @@ export const HVSC_CATALOG = [
     author: "Jeroen Tel",
     filename: "myth.sid",
     hvscPath: "MUSICIANS/T/Tel_Jeroen/Myth.sid",
-    duration: 240,
+    duration: 270,
     source: "System 3 (1989)",
   },
   {

@@ -947,6 +947,13 @@ html, body {
   box-shadow: 0 0 8px rgba(0, 255, 180, 0.25);
 }
 
+.btn-loop.active {
+  background-color: rgba(94, 234, 212, 0.15);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(94, 234, 212, 0.25);
+}
+
 .metadata-bar,
 .meta-bar {
   display: flex;

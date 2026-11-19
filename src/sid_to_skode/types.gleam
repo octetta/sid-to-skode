@@ -122,6 +122,7 @@ pub type Model {
     engine_version: String,
     is_playing: Bool,
     is_paused: Bool,
+    is_looping: Bool,
     current_step: Int,
     active_song: Option(DumpSong),
     conversion: Option(ConversionResult),
@@ -154,6 +155,7 @@ pub type Msg {
   PauseClicked
   ResumeClicked
   StopClicked
+  ToggleLoop
   PlaybackStepChanged(step: Int, total_steps: Int)
   PlaybackEnded
   DownloadSkodeClicked

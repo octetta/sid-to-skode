@@ -91,6 +91,16 @@ pub fn res_to_q(res: Int) -> Float {
   0.707 +. { int.to_float(res) *. 0.42 }
 }
 
+pub fn res_to_drive(res: Int) -> Float {
+  // Dynamic saturation drive for MOS 6581 OTA soft-clipping:
+  // Zero resonance = clean bypass (0.0). High resonance (1..15) introduces
+  // proportional cubic soft-clipping (0.6 .. 1.6) to compress resonant peaks.
+  case res > 0 {
+    True -> 0.6 +. { int.to_float(res) /. 15.0 } *. 1.0
+    False -> 0.0
+  }
+}
+
 pub fn format_float(val: Float, decimals: Int) -> String {
   let is_negative = val <. 0.0
   let abs_val = float.absolute_value(val)
@@ -344,7 +354,7 @@ pub fn filter_mode_int(mode_str: String) -> Int {
     "Bnd" | "BP" | "bp" -> 3
     "L+H" | "Not" | "not" -> 4
     "LBH" | "All" | "all" -> 5
-    "L+B" -> 1
+    "L+B" -> 6
     "B+H" -> 2
     _ -> 0
   }
@@ -360,6 +370,7 @@ fn voice_filter_tokens(
   res_changed: Bool,
   hz_str: String,
   q_str: String,
+  drive_str: String,
 ) -> List(String) {
   let is_filtered = mode_int > 0 && is_routed
   let was_filtered = prev_mode_int > 0 && was_routed
@@ -367,7 +378,7 @@ fn voice_filter_tokens(
 
   case was_filtered, is_filtered {
     // Was filtered, now turned off
-    True, False -> [v_tag, "j0"]
+    True, False -> [v_tag, "j0", "jd0"]
 
     // Turned on
     False, True -> [
@@ -375,6 +386,7 @@ fn voice_filter_tokens(
       "j" <> int.to_string(mode_int),
       "k" <> hz_str,
       "q" <> q_str,
+      "jd" <> drive_str,
     ]
 
     // Still filtered
@@ -386,10 +398,16 @@ fn voice_filter_tokens(
           "j" <> int.to_string(mode_int),
           "k" <> hz_str,
           "q" <> q_str,
+          "jd" <> drive_str,
         ]
-        False, True, True -> [v_tag, "k" <> hz_str, "q" <> q_str]
+        False, True, True -> [
+          v_tag,
+          "k" <> hz_str,
+          "q" <> q_str,
+          "jd" <> drive_str,
+        ]
         False, True, False -> [v_tag, "k" <> hz_str]
-        False, False, True -> [v_tag, "q" <> q_str]
+        False, False, True -> [v_tag, "q" <> q_str, "jd" <> drive_str]
         False, False, False -> []
       }
     }
@@ -413,6 +431,7 @@ fn generate_filter_step_tokens(
 
   let hz_str = format_float(cutoff_to_hz(ff.cutoff), 1)
   let q_str = format_float(res_to_q(ff.resonance), 2)
+  let drive_str = format_float(res_to_drive(ff.resonance), 1)
 
   let v0_toks =
     voice_filter_tokens(
@@ -425,6 +444,7 @@ fn generate_filter_step_tokens(
       res_changed,
       hz_str,
       q_str,
+      drive_str,
     )
 
   let v1_toks =
@@ -438,6 +458,7 @@ fn generate_filter_step_tokens(
       res_changed,
       hz_str,
       q_str,
+      drive_str,
     )
 
   let v2_toks =
@@ -451,6 +472,7 @@ fn generate_filter_step_tokens(
       res_changed,
       hz_str,
       q_str,
+      drive_str,
     )
 
   let filter_tokens = list.flatten([v0_toks, v1_toks, v2_toks])
