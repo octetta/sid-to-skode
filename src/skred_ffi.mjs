@@ -106,6 +106,12 @@ export async function initWorkletEngine() {
           }
         } else if (data.type === "error") {
           console.error("[sid-to-skode] AudioWorklet processor error:", data.error);
+          useWorklet = false;
+          workletReady = false;
+          ensureEngineRunning();
+          if (isPlaybackActive && loadedSongScript) {
+            playSkode(loadedSongScript, activeSongTotalSteps, lastReportedStep);
+          }
         }
       };
 
@@ -136,7 +142,7 @@ function getWasmModule() {
 }
 
 function ensureAudioContext() {
-  if (useWorklet && workletAudioContext && workletAudioContext.state === "suspended") {
+  if (workletAudioContext && workletAudioContext.state === "suspended") {
     workletAudioContext.resume().catch(() => {});
   }
   const M = win.Module;

@@ -114,6 +114,7 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
       }
     } catch (err) {
       console.error("[SkredWorklet] Error writing script to VFS:", err);
+      this.port.postMessage({ type: "error", error: String(err) });
     }
   }
 
@@ -133,6 +134,7 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
       }
     } catch (err) {
       console.error("[SkredWorklet] Command error:", err);
+      this.port.postMessage({ type: "error", error: String(err) });
     }
   }
 
