@@ -57,6 +57,16 @@ function ensureAudioContext() {
   if (win.AL && win.AL.currentCtx && win.AL.currentCtx.audioCtx && win.AL.currentCtx.audioCtx.state === "suspended") {
     win.AL.currentCtx.audioCtx.resume().catch(() => {});
   }
+  if (typeof win.emscriptenGetAudioObject === "function") {
+    for (let h = 1; h <= 4; h++) {
+      try {
+        const obj = win.emscriptenGetAudioObject(h);
+        if (obj && typeof obj.resume === "function" && obj.state === "suspended") {
+          obj.resume().catch(() => {});
+        }
+      } catch (e) {}
+    }
+  }
   if (win.miniaudio && Array.isArray(win.miniaudio.devices)) {
     for (const dev of win.miniaudio.devices) {
       if (dev && dev.webaudio && dev.webaudio.state === "suspended") {
@@ -374,7 +384,7 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "1.3.4";
+  return "1.3.5";
 }
 
 export function initEngine(callback) {
@@ -386,9 +396,9 @@ export function initEngine(callback) {
   win.Module = win.Module || {};
   win.Module.locateFile = function (path) {
     if (typeof window !== "undefined") {
-      return new URL("vendor/skred/" + path + "?v=1.3.4", getAppBaseUrl()).href;
+      return new URL("vendor/skred/" + path + "?v=1.3.5", getAppBaseUrl()).href;
     }
-    return "/vendor/skred/" + path + "?v=1.3.4";
+    return "/vendor/skred/" + path + "?v=1.3.5";
   };
 
   createReplDom();
