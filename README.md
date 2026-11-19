@@ -1,14 +1,14 @@
 # sid-to-skode
 
-[![Version](https://img.shields.io/badge/version-v1.0.5-blue.svg)](gleam.toml)
+[![Version](https://img.shields.io/badge/version-v1.0.6-blue.svg)](gleam.toml)
 [![Gleam](https://img.shields.io/badge/language-Gleam-ffaff3.svg)](https://gleam.run/)
 [![Lustre](https://img.shields.io/badge/frontend-Lustre-ff69b4.svg)](https://hexdocs.pm/lustre/)
-[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.3.5-38bdf8.svg)](https://github.com/octetta/sk3)
+[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.3.6-38bdf8.svg)](https://github.com/octetta/sk3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 1.0.0** synthesizer and **Skode** live-coding sequencer.
 
-> **Dogfooding the Skode Ecosystem**: `sid-to-skode` relies directly on the official **[`skode`](https://github.com/octetta/skode)** package (v1.0.0) for typed AST modeling, canonical script serialization, and direct WebAssembly engine dispatch (`skode/transport/wasm`), proving its real-world reliability on demanding 50 Hz Commodore 64 chiptune register streams. Audio synthesis is rendered via **dedicated multi-threaded AudioWorklet WebAssembly**, ensuring glitch-free audio playback immune to main-thread UI load.
+> **Dogfooding the Skode Ecosystem**: `sid-to-skode` relies directly on the official **[`skode`](https://github.com/octetta/skode)** package (v1.0.0) for typed AST modeling, canonical script serialization, and direct WebAssembly engine dispatch (`skode/transport/wasm`), proving its real-world reliability on demanding 50 Hz Commodore 64 chiptune register streams. Audio synthesis is rendered via **multi-threaded WebAssembly with cross-browser stable WebAudio integration**, ensuring glitch-free audio playback.
 
 Available both as a **100% client-side web application** with in-browser 6502 CPU execution, WebAssembly playback, and High Voltage SID Collection streaming, as well as a standalone **native CLI** runner written in pure Gleam.
 
