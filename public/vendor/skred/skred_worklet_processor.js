@@ -65,6 +65,8 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
           this.executeCommand(item);
         } else if (item && item.type === "script") {
           this.writeScript(item.script, item.cmd);
+        } else if (item && item.type === "file") {
+          this.writeFile(item.path, item.data, item.cmd);
         }
       }
     } catch (err) {
@@ -97,8 +99,32 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
       } else {
         this.commandQueue.push(data);
       }
+    } else if (data.type === "file") {
+      if (this.ready) {
+        this.writeFile(data.path, data.data, data.cmd);
+      } else {
+        this.commandQueue.push(data);
+      }
     } else if (data.type === "init" && !this.ready) {
       this.init(data.wasmBinary);
+    }
+  }
+
+  writeFile(filePath, data, followUpCmd) {
+    if (!this.module) return;
+    try {
+      if (this.module.FS && filePath && data) {
+        const cleanPath = filePath.startsWith("/") ? filePath : "/" + filePath;
+        const relPath = filePath.replace(/^\/+/, "");
+        try { this.module.FS.writeFile(cleanPath, data); } catch (e) {}
+        try { this.module.FS.writeFile(relPath, data); } catch (e) {}
+      }
+      if (followUpCmd) {
+        this.executeCommand(followUpCmd);
+      }
+    } catch (err) {
+      console.error("[SkredWorklet] Error writing file to VFS:", err);
+      this.port.postMessage({ type: "error", error: String(err) });
     }
   }
 
@@ -150,6 +176,8 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
         this.executeCommand(item);
       } else if (item && item.type === "script") {
         this.writeScript(item.script, item.cmd);
+      } else if (item && item.type === "file") {
+        this.writeFile(item.path, item.data, item.cmd);
       }
     }
 
