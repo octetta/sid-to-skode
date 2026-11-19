@@ -29,7 +29,7 @@ Available both as a **100% client-side web application** with in-browser 6502 CP
 - [How SID Registers Map to Skred](#how-sid-registers-map-to-skred)
   - [1. Frequency Tuning (`f#`)](#1-frequency-tuning-f)
   - [2. Pulse Width Modulation (PWM) via CZ Phase Distortion (`c1,#`)](#2-pulse-width-modulation-pwm-via-cz-phase-distortion-c1)
-  - [3. Band-Limited Analog Waveforms (`w15`, `w16`, `w18`, `w5`)](#3-band-limited-analog-waveforms-w15-w16-w18-w5)
+  - [3. Dedicated Ksynth SID Waveforms (`w300`–`w304`) & White Noise (`w6`)](#3-dedicated-ksynth-sid-waveforms-w300w304--white-noise-w6)
   - [4. ADSR Envelope Generators (`t`)](#4-adsr-envelope-generators-t)
   - [5. Cross-Oscillator Ring Modulation (`XM`)](#5-cross-oscillator-ring-modulation-xm)
   - [6. Realtime Biquad Filter Automation (`j`, `k`, `q`)](#6-realtime-biquad-filter-automation-j-k-q)
@@ -126,11 +126,13 @@ $$d = \frac{\text{PW} - 2048}{2048.0}$$
 
 Combined with Skred's bandlimited square wave (`w16`), 12-bit PWM sweeps are reproduced with analog warmth and zero digital aliasing.
 
-### 3. Band-Limited Analog Waveforms (`w15`, `w16`, `w18`, `w5`)
-- **Sawtooth** $\rightarrow$ `w15`: Bandlimited Analog Sawtooth (32-harmonic DWGS core).
-- **Square / Pulse** $\rightarrow$ `w16`: Bandlimited Analog Square with real-time `c1,d` phase-distortion PWM.
-- **Triangle** $\rightarrow$ `w18`: Bandlimited Analog Triangle.
-- **Noise** $\rightarrow$ `w5`: Pseudo-random tonal noise generator matching the low-frequency LFSR characteristics of the MOS 6581/8580.
+### 3. Dedicated Ksynth SID Waveforms (`w300`–`w304`) & White Noise (`w6`)
+- **Triangle** $\rightarrow$ `w300`: Ksynth bandlimited triangle wave (odd harmonics $1/h^2$, alternating phase).
+- **Sawtooth** $\rightarrow$ `w301`: Ksynth bandlimited sawtooth wave (64 harmonics $1/h$).
+- **Square / Pulse** $\rightarrow$ `w302`: Ksynth bandlimited square wave with real-time `c1,d` CZ phase-distortion PWM.
+- **Combined Saw+Triangle ($30)** $\rightarrow$ `w303`: Authentic hybrid dual-oscillator shape.
+- **Combined Saw+Pulse ($60)** $\rightarrow$ `w304`: Authentic hybrid dual-oscillator shape.
+- **Noise** $\rightarrow$ `w6`: Continuous hardware audio RNG white noise delivering full 44.1 kHz bandwidth punch for percussion, snare hits, and hi-hats.
 
 ### 4. ADSR Envelope Generators (`t`)
 SID envelope timings map logarithmically to seconds:
