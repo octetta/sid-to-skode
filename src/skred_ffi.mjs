@@ -348,7 +348,7 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "1.3.2";
+  return "1.3.3";
 }
 
 export function initEngine(callback) {
@@ -360,9 +360,9 @@ export function initEngine(callback) {
   win.Module = win.Module || {};
   win.Module.locateFile = function (path) {
     if (typeof window !== "undefined") {
-      return new URL("vendor/skred/" + path + "?v=1.3.2", getAppBaseUrl()).href;
+      return new URL("vendor/skred/" + path + "?v=1.3.3", getAppBaseUrl()).href;
     }
-    return "/vendor/skred/" + path + "?v=1.3.2";
+    return "/vendor/skred/" + path + "?v=1.3.3";
   };
 
   createReplDom();

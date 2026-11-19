@@ -78,7 +78,12 @@ pub fn pulse_to_cz(pulse: Int) -> Float {
 
 pub fn cutoff_to_hz(cutoff: Int) -> Float {
   // SID 11-bit filter cutoff (0..2047) roughly covers 30Hz to 12kHz
-  30.0 +. { int.to_float(cutoff) *. 5.8 }
+  let clamped = case cutoff {
+    _ if cutoff < 0 -> 0
+    _ if cutoff > 2047 -> 2047
+    _ -> cutoff
+  }
+  30.0 +. { int.to_float(clamped) *. 5.8 }
 }
 
 pub fn res_to_q(res: Int) -> Float {

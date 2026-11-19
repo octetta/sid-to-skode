@@ -81,15 +81,15 @@ pub fn dump_parse_and_convert_test() {
 
 pub fn realtime_filter_automation_test() {
   // Frame 0: Filter off
-  // Frame 1: Lowpass filter enabled on Voice 1 (v0), Cutoff 0400 (1024), Res 1
-  // Frame 2: Cutoff slid to 0600 (1536)
+  // Frame 1: Lowpass filter enabled on Voice 1 (v0), Cutoff 8000 (1024), Res 1
+  // Frame 2: Cutoff slid to C000 (1536)
   // Frame 3: Filter turned off
   let filter_dump =
     "| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |
 +-------+---------------------------+---------------------------+---------------------------+---------------+
 |     0 | AF58  E-7 D8  15 0DFB 180 | 0000  C-0 80  43 0FC4 200 | 03A9  A-1 95  41 099F 180 | 0000 00 Off F |
-|     1 | 0303 (F#1 92) 80 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | 0400 11 Low F |
-|     2 | AF58 (E-7 D8) .. .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 1AC | 0600 11 Low F |
+|     1 | 0303 (F#1 92) 80 .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 196 | 8000 11 Low F |
+|     2 | AF58 (E-7 D8) .. .... ... | ....  ... ..  .. .... ... | ....  ... ..  .. .... 1AC | C000 11 Low F |
 |     3 | 0303 (F#1 92) 14 .... ... | ....  ... ..  42 0000 ... | ....  ... ..  .. .... 1C2 | 0000 00 Off F |
 "
 
@@ -405,7 +405,7 @@ pub fn hard_sync_polyblep_test() {
 
 pub fn skode_ast_roundtrip_test() {
   skode.version |> should.equal("1.0.0")
-  skode.pulp_version |> should.equal("1.3.2")
+  skode.pulp_version |> should.equal("1.3.3")
 
   let ops = skode.parse_ops("v0 w301 f440 a-8 l1 t0.002,0.008,0.5,0.01 g0 HS 1")
   list.length(ops) |> should.equal(8)

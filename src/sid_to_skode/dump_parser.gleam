@@ -177,7 +177,11 @@ fn parse_filter_cell(raw: String, prev: FilterFrame) -> FilterFrame {
   let cutoff_is_dot = string.contains(cutoff_chunk, ".")
   let cutoff = case cutoff_is_dot {
     True -> prev.cutoff
-    False -> parse_hex(cutoff_chunk, prev.cutoff)
+    False ->
+      case int.base_parse(string.trim(cutoff_chunk), 16) {
+        Ok(raw) -> int.bitwise_shift_right(raw, 5)
+        Error(_) -> prev.cutoff
+      }
   }
   let cutoff_changed = !cutoff_is_dot && cutoff != prev.cutoff
 
