@@ -1,9 +1,9 @@
 # sid-to-skode
 
-[![Version](https://img.shields.io/badge/version-v1.0.9-blue.svg)](gleam.toml)
+[![Version](https://img.shields.io/badge/version-v1.0.10-blue.svg)](gleam.toml)
 [![Gleam](https://img.shields.io/badge/language-Gleam-ffaff3.svg)](https://gleam.run/)
 [![Lustre](https://img.shields.io/badge/frontend-Lustre-ff69b4.svg)](https://hexdocs.pm/lustre/)
-[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.3.9-38bdf8.svg)](https://github.com/octetta/sk3)
+[![Audio Engine](https://img.shields.io/badge/synth-Skred_1.3.13-38bdf8.svg)](https://github.com/octetta/sk3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 High-fidelity Commodore 64 MOS 6581 / 8580 SID converter, interactive in-browser audio studio, and real-time playback engine for the **Skred 1.0.0** synthesizer and **Skode** live-coding sequencer.
