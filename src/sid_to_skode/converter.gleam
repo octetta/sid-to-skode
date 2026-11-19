@@ -561,15 +561,15 @@ pub fn convert_song_full(
           "S0 S1 S2 S3",
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
             <> p0
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
             <> p1
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
             <> p2
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v3 [Digi Percussion] vt a-8 f440 t0.001,0.001,1.0,0.001 p"
             <> format_float(sample_pan, 2),
@@ -578,15 +578,15 @@ pub fn convert_song_full(
           "S0 S1 S2",
           "v0 [Voice 1] vt w302 a-8 t0.004,0.008,0.5,0.012 p"
             <> p0
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v1 [Voice 2] vt w301 a-8 t0.004,0.008,0.5,0.012 p"
             <> p1
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
           "v2 [Voice 3] vt w300 a-8 t0.004,0.008,0.5,0.012 p"
             <> p2
-            <> " HS-1"
+            <> " HS-1 NT 0"
             <> bc_suffix,
         ]
       }
@@ -609,23 +609,23 @@ pub fn convert_song_full(
             "# --- SID ksynth Oscillator Core ---",
             "# w300: SID Bandlimited Triangle (odd harmonics 1/h^2, alternating phase)",
             "[P: ~4096; H: !64; H: H+1; M: s(H*1.5707963); A: (1%(H*H))*M; W: w P $ A] k!",
-            "k>w300",
+            "k>w300; WB 300",
             "",
             "# w301: SID Bandlimited Sawtooth (all harmonics 1/h)",
             "[P: ~4096; H: !64; H: H+1; A: 1%H; W: w P $ A] k!",
-            "k>w301",
+            "k>w301; WB 301",
             "",
             "# w302: SID Bandlimited Square/Pulse (odd harmonics 1/h + CZ PWM c1)",
             "[P: ~4096; H: !64; H: H+1; M: a(s(H*1.5707963)); A: (1%H)*M; W: w P $ A] k!",
-            "k>w302",
+            "k>w302; WB 302",
             "",
             "# w303: SID Combined Saw+Triangle ($30 hybrid)",
             "[P: ~4096; H: !64; H: H+1; As: 1%H; At: (1%(H*H))*s(H*1.5707963); S: P $ As; T: P $ At; W: w (S*0.6)+(T*0.4)] k!",
-            "k>w303",
+            "k>w303; WB 303",
             "",
             "# w304: SID Combined Saw+Pulse ($60 hybrid)",
             "[P: ~4096; H: !64; H: H+1; As: 1%H; Ap: (1%H)*a(s(H*1.5707963)); S: P $ As; U: P $ Ap; W: w (S*0.5)+(U*0.5)] k!",
-            "k>w304",
+            "k>w304; WB 304",
             "",
           ],
           digi_header_lines,
