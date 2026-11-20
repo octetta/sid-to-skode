@@ -189,7 +189,7 @@ fn wave_opcode(wave_byte: Int) -> String {
     _, True, _, _ -> "w301"
     _, _, True, _ -> "w302"
     _, _, _, True -> "w300"
-    _, _, _, _ -> "w302"
+    _, _, _, _ -> ""
   }
 }
 
@@ -204,12 +204,22 @@ fn generate_voice_step_tokens(
 ) -> #(List(String), VoiceTracker) {
   let tokens = []
 
+  let has_wave = int.bitwise_and(vf.waveform_byte, 0xF0) != 0
+  let was_voiced =
+    tracker.last_gate
+    && tracker.last_wave >= 0
+    && int.bitwise_and(tracker.last_wave, 0xF0) != 0
+  let is_voiced = vf.gate && has_wave
+
   // Waveform changed
   let wave_changed = vf.waveform_byte != tracker.last_wave
   let #(tokens, next_wave) = case wave_changed {
     True -> {
       let op = wave_opcode(vf.waveform_byte)
-      #([op, ..tokens], vf.waveform_byte)
+      case op {
+        "" -> #(tokens, vf.waveform_byte)
+        _ -> #([op, ..tokens], vf.waveform_byte)
+      }
     }
     False -> #(tokens, tracker.last_wave)
   }
@@ -232,13 +242,15 @@ fn generate_voice_step_tokens(
   // On real MOS 6581/8580 hardware, the 23-bit noise LFSR is clocked by bit 19 of the 24-bit
   // accumulator, meaning the noise shift clock runs at 16x the tone oscillator frequency.
   let is_noise = int.bitwise_and(vf.waveform_byte, 0x80) != 0
-  let was_noise = int.bitwise_and(tracker.last_wave, 0x80) != 0
+  let was_noise =
+    tracker.last_wave >= 0 && int.bitwise_and(tracker.last_wave, 0x80) != 0
   let noise_transition = is_noise != was_noise && tracker.last_wave != -1
 
   let freq_changed = vf.freq != tracker.last_freq && vf.freq > 0
   let gate_turned_on =
-    { { vf.gate && !tracker.last_gate } || vf.gate_triggered } && vf.freq > 0
-  let gate_turned_off = !vf.gate && tracker.last_gate
+    { { is_voiced && !was_voiced } || { vf.gate_triggered && has_wave } }
+    && vf.freq > 0
+  let gate_turned_off = was_voiced && !is_voiced
 
   let effective_freq = case vf.freq > 0 {
     True -> vf.freq
@@ -298,10 +310,13 @@ fn generate_voice_step_tokens(
     False -> True
   }
   let should_attack =
-    gate_turned_on
-    || { vf.gate && adsr_changed && vf.freq > 0 }
-    || { vf.gate && freq_changed && is_melodic_jump }
-    || { vf.gate && freq_changed && tracker.frames_held >= 4 }
+    has_wave
+    && {
+      gate_turned_on
+      || { is_voiced && adsr_changed && vf.freq > 0 }
+      || { is_voiced && freq_changed && is_melodic_jump }
+      || { is_voiced && freq_changed && tracker.frames_held >= 4 }
+    }
 
   let tokens = case should_attack, gate_turned_off {
     True, _ -> ["l1", ..tokens]
