@@ -24,6 +24,7 @@ let workletAudioContext = null;
 let workletReady = false;
 let useWorklet = false;
 let workletInitAttempted = false;
+let workletFailed = false;
 let workletInitPromise = null;
 
 // WASM Control Event polling setup (fallback)
@@ -108,6 +109,7 @@ export async function initWorkletEngine() {
           console.error("[sid-to-skode] AudioWorklet processor error:", data.error);
           useWorklet = false;
           workletReady = false;
+          workletFailed = true;
           ensureEngineRunning();
           if (isPlaybackActive && loadedSongScript) {
             playSkode(loadedSongScript, activeSongTotalSteps, lastReportedStep);
@@ -121,6 +123,8 @@ export async function initWorkletEngine() {
     } catch (err) {
       console.warn("[sid-to-skode] AudioWorklet init failed, falling back to ScriptProcessor/miniaudio:", err);
       useWorklet = false;
+      workletReady = false;
+      workletFailed = true;
       return false;
     }
   })();
@@ -175,6 +179,10 @@ export function ensureEngineRunning() {
   ensureAudioContext();
   if (useWorklet && workletNode) {
     return true;
+  }
+  if (workletInitPromise && !workletReady && !workletFailed) {
+    // AudioWorklet is currently initializing asynchronously; do not launch main-thread fallback yet
+    return false;
   }
   const M = getWasmModule();
   if (!M) return false;
@@ -360,6 +368,23 @@ function flushCommandQueue() {
   }
 }
 
+let pendingUiStep = -1;
+let rafScheduled = false;
+
+function scheduleUiStepUpdate(step) {
+  pendingUiStep = step;
+  if (!rafScheduled) {
+    rafScheduled = true;
+    const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+    schedule(() => {
+      rafScheduled = false;
+      if (playbackStepCallback && pendingUiStep >= 0 && isPlaybackActive) {
+        playbackStepCallback(pendingUiStep, activeSongTotalSteps);
+      }
+    });
+  }
+}
+
 function processBatchEvents(events) {
   if (!events || events.length === 0) return;
   for (let i = 0; i < events.length; i++) {
@@ -374,6 +399,7 @@ function processBatchEvents(events) {
         ) {
           if (isLoopEnabled) {
             lastReportedStep = 0;
+            pendingUiStep = 0;
             executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
             if (playbackStepCallback) {
               playbackStepCallback(0, activeSongTotalSteps);
@@ -385,9 +411,7 @@ function processBatchEvents(events) {
           return;
         }
         lastReportedStep = s;
-        if (playbackStepCallback) {
-          playbackStepCallback(s, activeSongTotalSteps);
-        }
+        scheduleUiStepUpdate(s);
       }
     }
 
@@ -395,6 +419,7 @@ function processBatchEvents(events) {
     if (isPlaybackActive && t === 4 && id === 127) {
       if (isLoopEnabled) {
         lastReportedStep = 0;
+        pendingUiStep = 0;
         executeSkredCommand("?ce! /cer 1 Z! (0 1 2 3 127) Z>; y0 zg 0; y1 zg 0; y2 zg 0; y3 zg 0; y127 zg 0;");
         if (playbackStepCallback) {
           playbackStepCallback(0, activeSongTotalSteps);
@@ -604,7 +629,7 @@ export function playSkode(script, steps, startStep = 0) {
       executeSkredCommand(playSeqCmd);
     } else {
       executeSkredCommand("/cer 0 Z0 O DQ ?ce!; S-1; Y-1");
-      const followUp = "[song.sk] /ls; y0 yc1; y1 yc1; y2 yc1; y3 yc1; V" + currentMasterVolume + "; " + playSeqCmd;
+      const followUp = "[song.sk] /ls; y0 yc1; V" + currentMasterVolume + "; " + playSeqCmd;
       workletNode.port.postMessage({ type: "script", script, cmd: followUp });
       loadedSongScript = script;
     }
@@ -632,12 +657,12 @@ export function playSkode(script, steps, startStep = 0) {
         try { M.FS.writeFile("/song.sk", script); } catch (e) {}
         try { M.FS.writeFile("song.sk", script); } catch (e) {}
         executeSkredCommand("[song.sk] /ls");
-        executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+        executeSkredCommand("y0 yc1;");
         executeSkredCommand("V" + currentMasterVolume);
         executeSkredCommand(playSeqCmd);
       } else {
         executeSkredCommand(script);
-        executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+        executeSkredCommand("y0 yc1;");
         executeSkredCommand("V" + currentMasterVolume);
         executeSkredCommand(playSeqCmd);
       }
@@ -702,7 +727,7 @@ export function auditionSample(slot, script, samplePan = 0.0) {
   // If the script with wavetable definitions has not been loaded into Skred yet, load it now:
   if (script && loadedSongScript !== script) {
     if (useWorklet && workletNode) {
-      const followUp = "[song.sk] /ls; y0 yc1; y1 yc1; y2 yc1; y3 yc1;";
+      const followUp = "[song.sk] /ls; y0 yc1;";
       workletNode.port.postMessage({ type: "script", script, cmd: followUp });
     } else {
       const M = getWasmModule();
@@ -713,7 +738,7 @@ export function auditionSample(slot, script, samplePan = 0.0) {
       } else {
         executeSkredCommand(script);
       }
-      executeSkredCommand("y0 yc1; y1 yc1; y2 yc1; y3 yc1;");
+      executeSkredCommand("y0 yc1;");
     }
     loadedSongScript = script;
   }
