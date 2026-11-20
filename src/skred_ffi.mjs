@@ -99,6 +99,8 @@ export async function initWorkletEngine() {
           sendWorkletCommand("V" + currentMasterVolume);
           sendWorkletCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
           sendWorkletCommand("[play]: ?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>;");
+          sendWorkletCommand("[pause]: Z2 O;");
+          sendWorkletCommand("[resume]: Z3;");
         } else if (data.type === "events") {
           processBatchEvents(data.events);
         } else if (data.type === "log") {
@@ -215,6 +217,8 @@ export function ensureEngineRunning() {
     executeSkredCommand("V" + currentMasterVolume);
     executeSkredCommand("[stop]: /cer 0 Z0 O DQ ?ce!;");
     executeSkredCommand("[play]: ?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>;");
+    executeSkredCommand("[pause]: Z2 O;");
+    executeSkredCommand("[resume]: Z3;");
     flushCommandQueue();
     return engineStarted;
   } catch (err) {
@@ -680,21 +684,14 @@ export function pausePlayback() {
   if (!useWorklet) {
     stopWasmEventPump();
   }
-  if (useWorklet && workletAudioContext && workletAudioContext.state === "running") {
-    workletAudioContext.suspend().catch(() => {});
-  }
-  const M = win.Module;
-  if (M && M.audioContext && M.audioContext.state === "running") {
-    M.audioContext.suspend().catch(() => {});
-  }
-  executeSkredCommand("Z2");
+  executeSkredCommand("pause;");
 }
 
 export function resumePlayback() {
   if (!isPlaybackActive) return;
   isPlaybackPaused = false;
   ensureAudioContext();
-  executeSkredCommand("Z3");
+  executeSkredCommand("resume;");
   if (!useWorklet) {
     const M = getWasmModule();
     if (M) startWasmEventPump(M);

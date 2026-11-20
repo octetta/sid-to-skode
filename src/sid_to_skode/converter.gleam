@@ -900,6 +900,8 @@ pub fn convert_song_full(
         False -> "/cer 0 Z0 O DQ ?ce!; v0 l0; v1 l0; v2 l0; S-1"
       }
       let play_cmds = "?ce! /cer 1 Z0 Z! (0 1 2 3 127) Z>"
+      let pause_cmds = "Z2 O"
+      let resume_cmds = "Z3"
 
       let end_blocks = [
         "# === PATTERN TRANSITIONS & END OF SONG HOOK ===",
@@ -907,8 +909,10 @@ pub fn convert_song_full(
         "/cer 1",
         "",
         "# === MACROS ===",
-        "# The file does not start automatically. Type 'play' to begin, and 'stop' to halt.",
+        "# The file does not start automatically. Type 'play' to begin, 'pause'/'resume' to pause/continue, and 'stop' to halt.",
         "[play]: " <> play_cmds <> ";",
+        "[pause]: " <> pause_cmds <> ";",
+        "[resume]: " <> resume_cmds <> ";",
         "[stop]: " <> stop_cmds <> ";",
         "",
       ]
