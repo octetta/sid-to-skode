@@ -406,7 +406,7 @@ pub fn hard_sync_polyblep_test() {
 
 pub fn skode_ast_roundtrip_test() {
   skode.version |> should.equal("1.0.4")
-  skode.pulp_version |> should.equal("1.4.8")
+  skode.pulp_version |> should.equal("1.4.9")
 
   let ops = skode.parse_ops("v0 w301 f440 a-8 l1 t0.002,0.008,0.5,0.01 g0 HS 1")
   list.length(ops) |> should.equal(8)
