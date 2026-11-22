@@ -29,12 +29,13 @@
       }
       console.error("[SKRED ERR]", ...args);
     };
+    window.__skredVersion = "__SKRED_VERSION__";
     window.Module.locateFile = function(path) {
       const base = window.location.pathname.endsWith("/") ? window.location.href : window.location.pathname + "/";
-      return new URL("vendor/skred/" + path + "?v=1.4.9", new URL(base, window.location.origin)).href;
+      return new URL("vendor/skred/" + path + "?v=" + window.__skredVersion, new URL(base, window.location.origin)).href;
     };
   </script>
-  <script src="./vendor/skred/skred_api.js?v=1.4.9"></script>
+  <script src="./vendor/skred/skred_api.js?v=__SKRED_VERSION__"></script>
   <script type="module" src="/src/entry.mjs"></script>
 </body>
 </html>
