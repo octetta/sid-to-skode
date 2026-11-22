@@ -18,6 +18,77 @@ pub fn make_range(start: Int, end: Int) -> List(Int) {
   }
 }
 
+pub fn build_stream_gen(
+  stream_id: Int,
+  min: Float,
+  max: Float,
+  step: Float,
+  mode: Int,
+) -> String {
+  "/SG "
+  <> int.to_string(stream_id)
+  <> " "
+  <> format_float(min, 2)
+  <> " "
+  <> format_float(max, 2)
+  <> " "
+  <> format_float(step, 2)
+  <> " "
+  <> int.to_string(mode)
+}
+
+pub fn build_stream_seq(stream_id: Int, values: List(Float)) -> String {
+  "/SS "
+  <> int.to_string(stream_id)
+  <> " "
+  <> string.join(list.map(values, fn(v) { format_float(v, 2) }), " ")
+}
+
+pub fn build_step_range(program: String, start_step: Int, end_step: Int) -> String {
+  case start_step == end_step {
+    True -> "[" <> program <> "] x" <> int.to_string(start_step)
+    False ->
+      "["
+      <> program
+      <> "] "
+      <> int.to_string(start_step)
+      <> " "
+      <> int.to_string(end_step)
+      <> " X:"
+  }
+}
+
+pub fn coalesce_step_entries(entries: List(#(Int, String))) -> List(String) {
+  case entries {
+    [] -> []
+    [#(step, prog), ..rest] -> coalesce_step_loop(rest, step, step, prog, [])
+  }
+}
+
+fn coalesce_step_loop(
+  entries: List(#(Int, String)),
+  start_step: Int,
+  last_step: Int,
+  prog: String,
+  acc: List(String),
+) -> List(String) {
+  case entries {
+    [] -> {
+      let line = build_step_range(prog, start_step, last_step)
+      list.reverse([line, ..acc])
+    }
+    [#(step, next_prog), ..rest] -> {
+      case step == last_step + 1 && next_prog == prog {
+        True -> coalesce_step_loop(rest, start_step, step, prog, acc)
+        False -> {
+          let line = build_step_range(prog, start_step, last_step)
+          coalesce_step_loop(rest, step, step, next_prog, [line, ..acc])
+        }
+      }
+    }
+  }
+}
+
 pub fn format_duration(seconds: Float) -> String {
   let total_secs = float.truncate(seconds)
   let mins = total_secs / 60
@@ -759,7 +830,6 @@ pub fn convert_song_full(
           let updated_times = dict.insert(times, step_idx, cur_time)
 
           // Step 0 must bind voice identity to each track
-          let step_str = int.to_string(step_idx)
 
           // Voice 0 (modulated by V2, master to V1)
           let #(toks0, nt0) =
@@ -770,7 +840,7 @@ pub fn convert_song_full(
           }
           let new_lines0 = case toks0 {
             [] -> lines0
-            _ -> ["[" <> string.join(toks0, " ") <> "] x" <> step_str, ..lines0]
+            _ -> [#(step_idx, string.join(toks0, " ")), ..lines0]
           }
 
           // Voice 1 (modulated by V0, master to V2)
@@ -782,7 +852,7 @@ pub fn convert_song_full(
           }
           let new_lines1 = case toks1 {
             [] -> lines1
-            _ -> ["[" <> string.join(toks1, " ") <> "] x" <> step_str, ..lines1]
+            _ -> [#(step_idx, string.join(toks1, " ")), ..lines1]
           }
 
           // Voice 2 (modulated by V1, master to V0)
@@ -794,7 +864,7 @@ pub fn convert_song_full(
           }
           let new_lines2 = case toks2 {
             [] -> lines2
-            _ -> ["[" <> string.join(toks2, " ") <> "] x" <> step_str, ..lines2]
+            _ -> [#(step_idx, string.join(toks2, " ")), ..lines2]
           }
 
           // Conductor / Filter / Digi (Track 3)
@@ -815,7 +885,7 @@ pub fn convert_song_full(
           let new_lines_cond = case combined_cond_toks {
             [] -> lines_cond
             _ -> [
-              "[" <> string.join(combined_cond_toks, " ") <> "] x" <> step_str,
+              #(step_idx, string.join(combined_cond_toks, " ")),
               ..lines_cond
             ]
           }
@@ -842,28 +912,28 @@ pub fn convert_song_full(
         False -> "[v0 l0 v1 l0 v2 l0 ce 127 Z0] x"
       }
       let t0_text =
-        list.reverse(ch0_lines_rev)
+        coalesce_step_entries(list.reverse(ch0_lines_rev))
         |> list.prepend("[#] x " <> s_last_str)
         |> list.append([t0_stop_voices <> s_last_str])
         |> string.join("\n")
 
       // Track 1
       let t1_text =
-        list.reverse(ch1_lines_rev)
+        coalesce_step_entries(list.reverse(ch1_lines_rev))
         |> list.prepend("[#] x " <> s_last_str)
         |> list.append(["[v1 l0] x" <> s_last_str])
         |> string.join("\n")
 
       // Track 2
       let t2_text =
-        list.reverse(ch2_lines_rev)
+        coalesce_step_entries(list.reverse(ch2_lines_rev))
         |> list.prepend("[#] x " <> s_last_str)
         |> list.append(["[v2 l0] x" <> s_last_str])
         |> string.join("\n")
 
       // Conductor / Filter Track 3
       let cond_text =
-        list.reverse(cond_lines_rev)
+        coalesce_step_entries(list.reverse(cond_lines_rev))
         |> list.prepend("[#] x " <> s_last_str)
         |> string.join("\n")
 

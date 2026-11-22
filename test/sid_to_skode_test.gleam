@@ -417,3 +417,39 @@ pub fn skode_ast_roundtrip_test() {
   let reparsed = skode.parse_program(printed)
   reparsed |> should.equal(prog)
 }
+
+pub fn stream_and_range_coalesce_test() {
+  // Test /SG virtual stream generator emission
+  let sg = converter.build_stream_gen(10, 100.0, 500.0, 50.0, 2)
+  sg |> should.equal("/SG 10 100.00 500.00 50.00 2")
+
+  // Test /SS stream sequence emission
+  let ss = converter.build_stream_seq(11, [261.63, 329.63, 392.00, 523.25])
+  ss |> should.equal("/SS 11 261.63 329.63 392.00 523.25")
+
+  // Test build_step_range
+  converter.build_step_range("v0 f&10", 5, 5)
+  |> should.equal("[v0 f&10] x5")
+
+  converter.build_step_range("v0 f&10", 5, 12)
+  |> should.equal("[v0 f&10] 5 12 X:")
+
+  // Test coalesce_step_entries with mixed isolated and consecutive steps
+  let entries = [
+    #(0, "v0 w301"),
+    #(1, "v0 f440"),
+    #(2, "v0 f440"),
+    #(3, "v0 f440"),
+    #(4, "v0 f&10"),
+    #(5, "v0 f&10"),
+    #(7, "v0 l0"),
+  ]
+  let coalesced = converter.coalesce_step_entries(entries)
+  coalesced
+  |> should.equal([
+    "[v0 w301] x0",
+    "[v0 f440] 1 3 X:",
+    "[v0 f&10] 4 5 X:",
+    "[v0 l0] x7",
+  ])
+}
