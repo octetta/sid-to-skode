@@ -33,6 +33,7 @@ let workletNode = null;
 let workletAudioContext = null;
 let workletReady = false;
 let useWorklet = false;
+let workletVersion = null;
 let workletInitAttempted = false;
 let workletFailed = false;
 let workletInitPromise = null;
@@ -111,6 +112,7 @@ export async function initWorkletEngine() {
           console.log(`[sid-to-skode] AudioWorklet Skred engine ready (v${data.version}, ${data.sampleRate}Hz)`);
           workletReady = true;
           useWorklet = true;
+          workletVersion = data.version && !data.version.startsWith("unknown") ? data.version : getSkredVersion();
           sendWorkletCommand("Z0");
           sendWorkletCommand("Y-1");
           sendWorkletCommand("S-1");
@@ -542,8 +544,8 @@ export function getLoopEnabled() {
 }
 
 export function getEngineVersion() {
-  if (useWorklet && workletReady) {
-    return "1.3.19";
+  if (useWorklet && workletReady && workletVersion && !workletVersion.startsWith("unknown")) {
+    return workletVersion;
   }
   const M = getWasmModule();
   if (M) {
@@ -560,7 +562,10 @@ export function getEngineVersion() {
       } catch (e) {}
     }
   }
-  return "1.3.19";
+  if (workletVersion && !workletVersion.startsWith("unknown")) {
+    return workletVersion;
+  }
+  return getSkredVersion();
 }
 
 export function initEngine(callback) {
