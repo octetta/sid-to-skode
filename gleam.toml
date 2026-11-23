@@ -1,5 +1,5 @@
 name = "sid_to_skode"
-version = "1.1.0"
+version = "2.0.0"
 description = "Commodore 64 SID to Skode converter and real-time playback engine in Gleam and Lustre"
 licences = ["MIT"]
 repository = { type = "github", user = "octetta", repo = "sid-to-skode" }
